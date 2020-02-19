@@ -219,7 +219,7 @@ class IT600Gateway:
             },
         )
 
-    async def set_climate_device_temperature(self, device_id, setpoint_celsius: float):
+    async def set_climate_device_temperature(self, device_id: str, setpoint_celsius: float):
         """Public method for setting the temperature."""
 
         device = self.get_climate_device(device_id)
