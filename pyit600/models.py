@@ -4,7 +4,7 @@ from typing import Any, List, NamedTuple
 
 
 class ClimateDevice(NamedTuple):
-    is_online: bool
+    available: bool
     name: str
     unique_id: str
     temperature_unit: str
@@ -19,4 +19,5 @@ class ClimateDevice(NamedTuple):
     preset_mode: str
     preset_modes: List[str]
     supported_features: int
+    device_class: str
     data: dict

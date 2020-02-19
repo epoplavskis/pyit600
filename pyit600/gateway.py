@@ -129,7 +129,7 @@ class IT600Gateway:
                 continue
 
             thermostat = ClimateDevice(
-                is_online=True if thermostat_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
+                available=True if thermostat_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
                 name=json.loads(thermostat_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
                 unique_id=thermostat_status["data"]["UniID"],
                 temperature_unit=TEMP_CELSIUS,  # API always reports temperature as celsius
@@ -144,6 +144,7 @@ class IT600Gateway:
                 preset_mode=PRESET_OFF if th["HoldType"] == 7 else PRESET_PERMANENT_HOLD if th["HoldType"] == 2 else PRESET_FOLLOW_SCHEDULE,
                 preset_modes=[PRESET_FOLLOW_SCHEDULE, PRESET_PERMANENT_HOLD, PRESET_OFF],
                 supported_features=SUPPORT_TARGET_TEMPERATURE | SUPPORT_PRESET_MODE,
+                device_class="temperature",
                 data=thermostat_status["data"]
             )
 
@@ -191,7 +192,9 @@ class IT600Gateway:
                 "id": [
                     {
                         "data": device.data,
-                        "sIT600TH": {"SetHoldType": 7 if preset == PRESET_OFF else 2 if preset == PRESET_PERMANENT_HOLD else 0},
+                        "sIT600TH": {
+                            "SetHoldType": 7 if preset == PRESET_OFF else 2 if preset == PRESET_PERMANENT_HOLD else 0
+                        },
                     }
                 ],
             },
@@ -262,9 +265,9 @@ class IT600Gateway:
         try:
             with async_timeout.timeout(self._request_timeout):
                 resp = await self._session.post(
-                        f"http://{self._host}:{self._port}/deviceid/{command}",
-                        data=self._encryptor.encrypt(json.dumps(request_body)),
-                        headers={"content-type": "application/json"},
+                    f"http://{self._host}:{self._port}/deviceid/{command}",
+                    data=self._encryptor.encrypt(json.dumps(request_body)),
+                    headers={"content-type": "application/json"},
                 )
                 response_bytes = await resp.read()
                 response_json_string = self._encryptor.decrypt(response_bytes)
