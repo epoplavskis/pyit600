@@ -46,4 +46,5 @@ setup(author="Julius Vitkauskas",
       url="https://github.com/jvitkauskas/pyit600",
       version=get_version(),
       zip_safe=False,
+      python_requires='>=3.7',
       )

@@ -53,8 +53,9 @@ class IT600Gateway:
         self._climate_devices: Dict[str, ClimateDevice] = {}
         self._climate_update_callbacks = []
 
-    async def connect(self):
-        """Public method for connecting to Salus universal gateway."""
+    async def connect(self) -> str:
+        """Public method for connecting to Salus universal gateway.
+           On successful connection, returns gateway's mac address"""
 
         _LOGGER.debug("Trying to connect to gateway at %s", self._host)
 
@@ -63,7 +64,25 @@ class IT600Gateway:
             self._close_session = True
 
         try:
-            await self.poll_status()
+            all_devices = await self._make_encrypted_request(
+                "read",
+                {
+                    "requestAttr": "readall"
+                }
+            )
+
+            gateway = next(
+                filter(lambda x: len(x.get("sGateway", {}).get("NetworkLANMAC", "")) > 0, all_devices["id"]),
+                None
+            )
+
+            if gateway is None:
+                raise IT600CommandError(
+                    "Error occurred while communicating with iT600 gateway: "
+                    "response did not contain gateway information"
+                )
+
+            return gateway["sGateway"]["NetworkLANMAC"]
         except IT600ConnectionError as ae:
             try:
                 with async_timeout.timeout(self._request_timeout):
@@ -104,7 +123,10 @@ class IT600Gateway:
         local_thermostats = {}
 
         for thermostat_status in status["id"]:
-            th = thermostat_status["sIT600TH"]
+            th = thermostat_status.get("sIT600TH", None)
+
+            if th is None:
+                continue
 
             thermostat = ClimateDevice(
                 is_online=True if thermostat_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
