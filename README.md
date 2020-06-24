@@ -20,6 +20,7 @@ pip install pyit600
 ```python
 async with IT600Gateway(host=args.host, euid=args.euid) as gateway:
 	await gateway.connect()
+	await gateway.poll_status()
 
 	print("All climate devices:")
 	print(repr(gateway.get_climate_devices()))
