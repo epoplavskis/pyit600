@@ -19,6 +19,10 @@ def help():
     print("    main.py --host 192.168.0.125 --euid 001E5E0D32906128")
 
 
+async def my_climate_callback(device_id):
+    print("Got callback for device id: " + device_id)
+
+
 async def main():
     logging.basicConfig(level=logging.DEBUG)
     parser = argparse.ArgumentParser(description="Commands: mode fan temp")
@@ -47,12 +51,16 @@ async def main():
     async with IT600Gateway(host=args.host, euid=args.euid) as gateway:
         try:
             await gateway.connect()
-        except IT600ConnectionError as ce:
+        except IT600ConnectionError:
             print("Connection error: check if you have specified gateway's IP address correctly.", file=sys.stderr)
             sys.exit(1)
-        except IT600AuthenticationError as ae:
+        except IT600AuthenticationError:
             print("Authentication error: check if you have specified gateway's EUID correctly.", file=sys.stderr)
             sys.exit(2)
+
+        await gateway.add_climate_update_callback(my_climate_callback)
+
+        await gateway.poll_status(send_callback=True)
 
         print("All climate devices:")
         print(repr(gateway.get_climate_devices()))
