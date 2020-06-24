@@ -3,7 +3,7 @@
 import asyncio
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Callable, Awaitable
 
 import aiohttp
 import async_timeout
@@ -51,7 +51,7 @@ class IT600Gateway:
         self._close_session = False
 
         self._climate_devices: Dict[str, ClimateDevice] = {}
-        self._climate_update_callbacks = []
+        self._climate_update_callbacks: List[Callable[[Any], Awaitable[None]]] = []
 
     async def connect(self) -> str:
         """Public method for connecting to Salus universal gateway.
@@ -98,7 +98,7 @@ class IT600Gateway:
                 "check if you have specified EUID correctly"
             ) from ae
 
-    async def poll_status(self, send_callback=False):
+    async def poll_status(self, send_callback=False) -> None:
         """Public method for polling the state of Salus iT600 devices."""
 
         all_devices = await self._make_encrypted_request(
@@ -157,7 +157,7 @@ class IT600Gateway:
         self._climate_devices = local_thermostats
         _LOGGER.debug("Refreshed %s climate devices", len(self._climate_devices))
 
-    async def _send_climate_update_callback(self, device_id=None):
+    async def _send_climate_update_callback(self, device_id: str) -> None:
         """Internal method to notify all update callback subscribers."""
 
         if self._climate_update_callbacks:
@@ -176,7 +176,7 @@ class IT600Gateway:
 
         return self._climate_devices.get(device_id)
 
-    async def set_climate_device_preset(self, device_id: str, preset: str):
+    async def set_climate_device_preset(self, device_id: str, preset: str) -> None:
         """Public method for setting the hvac preset."""
 
         device = self.get_climate_device(device_id)
@@ -200,7 +200,7 @@ class IT600Gateway:
             },
         )
 
-    async def set_climate_device_mode(self, device_id: str, mode: str):
+    async def set_climate_device_mode(self, device_id: str, mode: str) -> None:
         """Public method for setting the hvac mode."""
 
         device = self.get_climate_device(device_id)
@@ -222,7 +222,7 @@ class IT600Gateway:
             },
         )
 
-    async def set_climate_device_temperature(self, device_id: str, setpoint_celsius: float):
+    async def set_climate_device_temperature(self, device_id: str, setpoint_celsius: float) -> None:
         """Public method for setting the temperature."""
 
         device = self.get_climate_device(device_id)
@@ -231,7 +231,7 @@ class IT600Gateway:
             _LOGGER.error("Cannot set mode: climate device not found with the specified id: %s", device_id)
             return
 
-        resp = await self._make_encrypted_request(
+        await self._make_encrypted_request(
             "write",
             {
                 "requestAttr": "write",
@@ -250,7 +250,7 @@ class IT600Gateway:
 
         return round(number * 2) / 2
 
-    async def add_climate_update_callback(self, method):
+    async def add_climate_update_callback(self, method: Callable[[Any], Awaitable[None]]) -> None:
         """Public method to add a climate callback subscriber."""
 
         self._climate_update_callbacks.append(method)
@@ -299,7 +299,7 @@ class IT600Gateway:
         if self._session and self._close_session:
             await self._session.close()
 
-    async def __aenter__(self) -> "pyit600":
+    async def __aenter__(self) -> "IT600Gateway":
         """Async enter."""
 
         return self
