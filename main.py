@@ -14,9 +14,10 @@ def help():
     print("options:")
     print("   --host <gateway_ip>     ... network address of your Salus UG600 universal gateway")
     print("   --euid <gateway_euid>   ... EUID which is specified on the bottom of your gateway")
+    print("   --debug                 ... use this if you want to print requests/responses")
     print()
     print("examples:")
-    print("    main.py --host 192.168.0.125 --euid 001E5E0D32906128")
+    print("    main.py --host 192.168.0.125 --euid 001E5E0D32906128 --debug")
 
 
 async def my_climate_callback(device_id):
@@ -42,13 +43,19 @@ async def main():
         metavar="EUID",
         default=None,
     )
+    parser.add_argument(
+        "--debug",
+        dest="debug",
+        help="Debug mode which prints requests/responses",
+        action="store_true",
+    )
     args = parser.parse_args()
 
     if (not args.host) or (not args.euid):
         help()
         sys.exit(0)
 
-    async with IT600Gateway(host=args.host, euid=args.euid) as gateway:
+    async with IT600Gateway(host=args.host, euid=args.euid, debug=args.debug) as gateway:
         try:
             await gateway.connect()
         except IT600ConnectionError:

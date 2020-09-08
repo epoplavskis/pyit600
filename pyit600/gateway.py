@@ -40,11 +40,13 @@ class IT600Gateway:
             port: int = 80,
             request_timeout: int = 5,
             session: aiohttp.client.ClientSession = None,
+            debug: bool = False,
     ):
         self._encryptor = IT600Encryptor(euid)
         self._host = host
         self._port = port
         self._request_timeout = request_timeout
+        self._debug = debug
 
         """Initialize connection with the iT600 gateway."""
         self._session = session
@@ -263,14 +265,24 @@ class IT600Gateway:
             self._close_session = True
 
         try:
+            request_url = f"http://{self._host}:{self._port}/deviceid/{command}"
+            request_body_json = json.dumps(request_body)
+
+            if self._debug:
+                _LOGGER.debug("Gateway request: POST %s\n%s\n", request_url, request_body_json)
+
             with async_timeout.timeout(self._request_timeout):
                 resp = await self._session.post(
-                    f"http://{self._host}:{self._port}/deviceid/{command}",
-                    data=self._encryptor.encrypt(json.dumps(request_body)),
+                    request_url,
+                    data=self._encryptor.encrypt(request_body_json),
                     headers={"content-type": "application/json"},
                 )
                 response_bytes = await resp.read()
                 response_json_string = self._encryptor.decrypt(response_bytes)
+
+                if self._debug:
+                    _LOGGER.debug("Gateway response:\n%s\n", response_json_string)
+
                 response_json = json.loads(response_json_string)
 
                 if not response_json["status"] == "success":
