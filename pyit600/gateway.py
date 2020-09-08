@@ -114,47 +114,48 @@ class IT600Gateway:
             filter(lambda x: x.get("sBasicS", {}).get("ModelIdentifier", "").startswith("it600ThermHW"), all_devices["id"])
         )
 
-        status = await self._make_encrypted_request(
-            "read",
-            {
-                "requestAttr": "deviceid",
-                "id": [{"data": thermostat["data"]} for thermostat in thermostats]
-            }
-        )
-
         local_thermostats = {}
 
-        for thermostat_status in status["id"]:
-            th = thermostat_status.get("sIT600TH", None)
-
-            if th is None:
-                continue
-
-            thermostat = ClimateDevice(
-                available=True if thermostat_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
-                name=json.loads(thermostat_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
-                unique_id=thermostat_status["data"]["UniID"],
-                temperature_unit=TEMP_CELSIUS,  # API always reports temperature as celsius
-                precision=0.5,
-                current_temperature=th["LocalTemperature_x100"] / 100,
-                target_temperature=th["HeatingSetpoint_x100"] / 100,
-                max_temp=th["MaxHeatSetpoint_x100"] / 100,
-                min_temp=th["MinHeatSetpoint_x100"] / 100,
-                hvac_mode=HVAC_MODE_OFF if th["HoldType"] == 7 else HVAC_MODE_HEAT,
-                hvac_action=CURRENT_HVAC_OFF if th["HoldType"] == 7 else CURRENT_HVAC_HEAT if th["RunningState"] == 1 else CURRENT_HVAC_IDLE,
-                hvac_modes=[HVAC_MODE_OFF, HVAC_MODE_HEAT],
-                preset_mode=PRESET_OFF if th["HoldType"] == 7 else PRESET_PERMANENT_HOLD if th["HoldType"] == 2 else PRESET_FOLLOW_SCHEDULE,
-                preset_modes=[PRESET_FOLLOW_SCHEDULE, PRESET_PERMANENT_HOLD, PRESET_OFF],
-                supported_features=SUPPORT_TARGET_TEMPERATURE | SUPPORT_PRESET_MODE,
-                device_class="temperature",
-                data=thermostat_status["data"]
+        if thermostats:
+            status = await self._make_encrypted_request(
+                "read",
+                {
+                    "requestAttr": "deviceid",
+                    "id": [{"data": thermostat["data"]} for thermostat in thermostats]
+                }
             )
 
-            local_thermostats[thermostat.unique_id] = thermostat
+            for thermostat_status in status["id"]:
+                th = thermostat_status.get("sIT600TH", None)
 
-            if send_callback:
-                self._climate_devices[thermostat.unique_id] = thermostat
-                await self._send_climate_update_callback(device_id=thermostat.unique_id)
+                if th is None:
+                    continue
+
+                thermostat = ClimateDevice(
+                    available=True if thermostat_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
+                    name=json.loads(thermostat_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
+                    unique_id=thermostat_status["data"]["UniID"],
+                    temperature_unit=TEMP_CELSIUS,  # API always reports temperature as celsius
+                    precision=0.5,
+                    current_temperature=th["LocalTemperature_x100"] / 100,
+                    target_temperature=th["HeatingSetpoint_x100"] / 100,
+                    max_temp=th["MaxHeatSetpoint_x100"] / 100,
+                    min_temp=th["MinHeatSetpoint_x100"] / 100,
+                    hvac_mode=HVAC_MODE_OFF if th["HoldType"] == 7 else HVAC_MODE_HEAT,
+                    hvac_action=CURRENT_HVAC_OFF if th["HoldType"] == 7 else CURRENT_HVAC_HEAT if th["RunningState"] == 1 else CURRENT_HVAC_IDLE,
+                    hvac_modes=[HVAC_MODE_OFF, HVAC_MODE_HEAT],
+                    preset_mode=PRESET_OFF if th["HoldType"] == 7 else PRESET_PERMANENT_HOLD if th["HoldType"] == 2 else PRESET_FOLLOW_SCHEDULE,
+                    preset_modes=[PRESET_FOLLOW_SCHEDULE, PRESET_PERMANENT_HOLD, PRESET_OFF],
+                    supported_features=SUPPORT_TARGET_TEMPERATURE | SUPPORT_PRESET_MODE,
+                    device_class="temperature",
+                    data=thermostat_status["data"]
+                )
+
+                local_thermostats[thermostat.unique_id] = thermostat
+
+                if send_callback:
+                    self._climate_devices[thermostat.unique_id] = thermostat
+                    await self._send_climate_update_callback(device_id=thermostat.unique_id)
 
         self._climate_devices = local_thermostats
         _LOGGER.debug("Refreshed %s climate devices", len(self._climate_devices))
