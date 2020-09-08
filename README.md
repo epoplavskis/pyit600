@@ -22,10 +22,10 @@ async with IT600Gateway(host=args.host, euid=args.euid) as gateway:
 	await gateway.connect()
 	await gateway.poll_status()
 
-	print("All climate devices:")
-	print(repr(gateway.get_climate_devices()))
-
 	climate_devices = gateway.get_climate_devices()
+
+	print("All climate devices:")
+	print(repr(climate_devices))
 
 	for climate_device_id in climate_devices:
 		print(f"Climate device {climate_device_id} status:")
@@ -43,3 +43,7 @@ async with IT600Gateway(host=args.host, euid=args.euid) as gateway:
  - set_climate_device_preset(device_id, preset)
  - set_climate_device_mode(device_id, mode)
  - set_climate_device_temperature(device_id, setpoint_celsius)
+
+### Contributing
+
+If you want to help to get your thermostat supported, open GitHub issue and add your thermostat model number and output of `main.py` program. Be sure to run this program with --debug option.
