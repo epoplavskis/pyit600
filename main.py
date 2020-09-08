@@ -69,10 +69,14 @@ async def main():
 
         await gateway.poll_status(send_callback=True)
 
-        print("All climate devices:")
-        print(repr(gateway.get_climate_devices()))
-
         climate_devices = gateway.get_climate_devices()
+
+        if not climate_devices:
+            print("""Warning: no climate devices found. Ensure that you have paired your thermostat(s) with gateway and you can see it in the official Salus app. If it works there, your thermostat might not be supported. If you want to help to get it supported, open GitHub issue and add your thermostat model number and output of this program. Be sure to run this program with --debug option.""")
+            return
+
+        print("All climate devices:")
+        print(repr(climate_devices))
 
         for climate_device_id in climate_devices:
             print(f"Climate device {climate_device_id} status:")
