@@ -111,7 +111,7 @@ class IT600Gateway:
         )
 
         thermostats = list(
-            filter(lambda x: x.get("sBasicS", {}).get("ModelIdentifier", "").startswith("it600ThermHW"), all_devices["id"])
+            filter(lambda x: "sIT600TH" in x, all_devices["id"])
         )
 
         local_thermostats = {}
