@@ -142,7 +142,7 @@ class IT600Gateway:
                     max_temp=th.get("MaxHeatSetpoint_x100", 3500) / 100,
                     min_temp=th.get("MinHeatSetpoint_x100", 500) / 100,
                     hvac_mode=HVAC_MODE_OFF if th["HoldType"] == 7 else HVAC_MODE_HEAT,
-                    hvac_action=CURRENT_HVAC_OFF if th["HoldType"] == 7 else CURRENT_HVAC_IDLE if th["RunningState"] % 2 == 0 else CURRENT_HVAC_HEAT,  # RunningState 0 and 128 => idle, 1 and 129 => heating
+                    hvac_action=CURRENT_HVAC_OFF if th["HoldType"] == 7 else CURRENT_HVAC_IDLE if th["RunningState"] % 2 == 0 else CURRENT_HVAC_HEAT,  # RunningState 0 or 128 => idle, 1 or 129 => heating
                     hvac_modes=[HVAC_MODE_OFF, HVAC_MODE_HEAT],
                     preset_mode=PRESET_OFF if th["HoldType"] == 7 else PRESET_PERMANENT_HOLD if th["HoldType"] == 2 else PRESET_FOLLOW_SCHEDULE,
                     preset_modes=[PRESET_FOLLOW_SCHEDULE, PRESET_PERMANENT_HOLD, PRESET_OFF],
