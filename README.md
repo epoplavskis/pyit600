@@ -44,6 +44,15 @@ async with IT600Gateway(host=args.host, euid=args.euid) as gateway:
  - set_climate_device_mode(device_id, mode)
  - set_climate_device_temperature(device_id, setpoint_celsius)
 
+### Supported thermostats
+
+These thermostats have been tested:
+* VS20WRF/VS20BRF
+* VS10WRF/VS10BRF
+* HTRP-RF(50)
+* TS600
+* SQ610RF
+
 ### Contributing
 
 If you want to help to get your thermostat supported, open GitHub issue and add your thermostat model number and output of `main.py` program. Be sure to run this program with --debug option.
