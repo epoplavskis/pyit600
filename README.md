@@ -47,10 +47,10 @@ async with IT600Gateway(host=args.host, euid=args.euid) as gateway:
 ### Supported thermostats
 
 These thermostats have been tested:
-* VS20WRF/VS20BRF
-* VS10WRF/VS10BRF
 * HTRP-RF(50)
 * TS600
+* VS10WRF/VS10BRF
+* VS20WRF/VS20BRF
 * SQ610RF
 
 ### Contributing
