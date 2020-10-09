@@ -27,7 +27,7 @@ from .exceptions import (
     IT600CommandError,
     IT600ConnectionError,
 )
-from .models import ClimateDevice
+from .models import ClimateDevice, SensorDevice
 
 _LOGGER = logging.getLogger("pyit600")
 
@@ -54,6 +54,9 @@ class IT600Gateway:
 
         self._climate_devices: Dict[str, ClimateDevice] = {}
         self._climate_update_callbacks: List[Callable[[Any], Awaitable[None]]] = []
+
+        self._sensor_devices: Dict[str, ClimateDevice] = {}
+        self._sensor_update_callbacks: List[Callable[[Any], Awaitable[None]]] = []
 
     async def connect(self) -> str:
         """Public method for connecting to Salus universal gateway.
@@ -114,6 +117,50 @@ class IT600Gateway:
             filter(lambda x: "sIT600TH" in x, all_devices["id"])
         )
 
+        await self._refresh_climate_devices(thermostats, send_callback)
+
+        sensors = list(
+            filter(lambda x: "sIASZS" in x, all_devices["id"])
+        )
+
+        await self._refresh_sensor_devices(sensors, send_callback)
+
+    async def _refresh_sensor_devices(self, sensors: List[Any], send_callback=False):
+        local_sensors = {}
+
+        if sensors:
+            status = await self._make_encrypted_request(
+                "read",
+                {
+                    "requestAttr": "deviceid",
+                    "id": [{"data": sensor["data"]} for sensor in sensors]
+                }
+            )
+
+        for sensor_status in status["id"]:
+            se = sensor_status.get("sIASZS", None)
+
+            if se is None or sensor_status.get("sIASZS", {}).get("ErrorIASZSAlarmed1", None) is None:
+                continue
+
+            sensor = SensorDevice(
+                available=True if sensor_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
+                name=json.loads(sensor_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
+                unique_id=sensor_status["data"]["UniID"],
+                state=str(sensor_status["sIASZS"]["ErrorIASZSAlarmed1"]),
+                data=sensor_status["data"]
+            )
+
+            local_sensors[sensor.unique_id] = sensor
+
+            if send_callback:
+                self._sensor_devices[sensor.unique_id] = sensor
+                await self._send_sensor_update_callback(device_id=sensor.unique_id)
+
+        self._sensor_devices = local_sensors
+        _LOGGER.debug("Refreshed %s sensor devices", len(self._sensor_devices))
+
+    async def _refresh_climate_devices(self, thermostats: List[Any], send_callback=False):
         local_thermostats = {}
 
         if thermostats:
@@ -169,15 +216,34 @@ class IT600Gateway:
         else:
             _LOGGER.error("Callback for climate updates has not been set")
 
+    async def _send_sensor_update_callback(self, device_id: str) -> None:
+        """Internal method to notify all update callback subscribers."""
+
+        if self._sensor_update_callbacks:
+            for sensor_callback in self._sensor_update_callbacks:
+                await sensor_callback(device_id=device_id)
+        else:
+            _LOGGER.error("Callback for sensor updates has not been set")
+
     def get_climate_devices(self) -> Dict[str, ClimateDevice]:
-        """Public method to return the state of all Salus IT600 devices."""
+        """Public method to return the state of all Salus IT600 climate devices."""
 
         return self._climate_devices
 
     def get_climate_device(self, device_id: str) -> Optional[ClimateDevice]:
-        """Public method to return the state of the specified device."""
+        """Public method to return the state of the specified climate device."""
 
         return self._climate_devices.get(device_id)
+
+    def get_sensor_devices(self) -> Dict[str, SensorDevice]:
+        """Public method to return the state of all Salus IT600 sensor devices."""
+
+        return self._sensor_devices
+
+    def get_sensor_device(self, device_id: str) -> Optional[SensorDevice]:
+        """Public method to return the state of the specified sensor device."""
+
+        return self._sensor_devices.get(device_id)
 
     async def set_climate_device_preset(self, device_id: str, preset: str) -> None:
         """Public method for setting the hvac preset."""
@@ -257,6 +323,11 @@ class IT600Gateway:
         """Public method to add a climate callback subscriber."""
 
         self._climate_update_callbacks.append(method)
+
+    async def add_sensor_update_callback(self, method: Callable[[Any], Awaitable[None]]) -> None:
+        """Public method to add a sensor callback subscriber."""
+
+        self._sensor_update_callbacks.append(method)
 
     async def _make_encrypted_request(self, command: str, request_body: dict) -> Any:
         """Makes encrypted Salus iT600 json request, decrypts and returns response."""

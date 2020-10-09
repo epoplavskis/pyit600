@@ -21,3 +21,11 @@ class ClimateDevice(NamedTuple):
     supported_features: int
     device_class: str
     data: dict
+
+
+class SensorDevice(NamedTuple):
+    available: bool
+    name: str
+    unique_id: str
+    state: str
+    data: dict
