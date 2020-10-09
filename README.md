@@ -2,7 +2,7 @@
 
 ## About
 
-This package allows you to control and monitor your Salus iT600 smart home devices locally through Salus UG600 universal gateway. Currently only heating thermostats supported. You have any other devices and would like to contribute - you are welcome to create an issue or submit a pull request.
+This package allows you to control and monitor your Salus iT600 smart home devices locally through Salus UG600 universal gateway. Currently only heating thermostats and some sensors are supported. You have any other devices and would like to contribute - you are welcome to create an issue or submit a pull request.
 
 ## Installation
 
@@ -13,7 +13,7 @@ pip install pyit600
 ## Usage
  - Instantiate the IT600Gateway device with local ip address and EUID of your gateway. You can find EUID written down on the bottom of your gateway (eg. 001E5E0D32906128).
  - Status can be polled using the `poll_status()` command.
- - Callbacks to be notified of state updates can be added with the `add_climate_update_callback(method)` method.
+ - Callbacks to be notified of state updates can be added with the `add_climate_update_callback(method)` or `add_sensor_update_callback(method)` method.
 
 ### Basic example
 
@@ -43,8 +43,10 @@ async with IT600Gateway(host=args.host, euid=args.euid) as gateway:
  - set_climate_device_preset(device_id, preset)
  - set_climate_device_mode(device_id, mode)
  - set_climate_device_temperature(device_id, setpoint_celsius)
+ - get_sensor_devices()
+ - get_sensor_device(device_id)
 
-### Supported thermostats
+### Supported devices
 
 These thermostats have been tested:
 * HTRP-RF(50)
@@ -53,6 +55,13 @@ These thermostats have been tested:
 * VS20WRF/VS20BRF
 * SQ610RF
 
+These sensors have been tested:
+* SW600
+
+These sensors have not been tested, but may work:
+* WLS600
+* OS600
+
 ### Contributing
 
-If you want to help to get your thermostat supported, open GitHub issue and add your thermostat model number and output of `main.py` program. Be sure to run this program with --debug option.
+If you want to help to get your device supported, open GitHub issue and add your device model number and output of `main.py` program. Be sure to run this program with --debug option.
