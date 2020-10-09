@@ -70,7 +70,7 @@ async def main():
             sys.exit(2)
 
         await gateway.add_climate_update_callback(my_climate_callback)
-        await gateway.add_sensor_update_callback(my_sensor_callback)
+        await gateway.add_binary_sensor_update_callback(my_sensor_callback)
 
         await gateway.poll_status(send_callback=True)
 
@@ -90,7 +90,7 @@ async def main():
                 print(f"Setting heating device {climate_device_id} temperature to 21 degrees celsius")
                 await gateway.set_climate_device_temperature(climate_device_id, 21)
 
-        sensor_devices = gateway.get_sensor_devices()
+        sensor_devices = gateway.get_binary_sensor_devices()
 
         if not sensor_devices:
             print(
@@ -104,7 +104,7 @@ async def main():
                 device = sensor_devices.get(sensor_device_id)
                 print(repr(device))
 
-                print(f"'{device.name}' state: {device.state}")
+                print(f"'{device.name}' is on: {device.is_on}")
 
 
 if __name__ == "__main__":
