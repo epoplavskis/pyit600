@@ -61,6 +61,7 @@ These sensors have been tested:
 These sensors have not been tested, but may work:
 * WLS600
 * OS600
+* SD600
 
 ### Contributing
 
