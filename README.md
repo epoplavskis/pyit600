@@ -43,8 +43,8 @@ async with IT600Gateway(host=args.host, euid=args.euid) as gateway:
  - set_climate_device_preset(device_id, preset)
  - set_climate_device_mode(device_id, mode)
  - set_climate_device_temperature(device_id, setpoint_celsius)
- - get_sensor_devices()
- - get_sensor_device(device_id)
+ - get_binary_sensor_devices()
+ - get_binary_sensor_device(device_id)
 
 ### Supported devices
 
