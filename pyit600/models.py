@@ -1,6 +1,6 @@
 """Salus iT600 smart device models."""
 
-from typing import List, NamedTuple
+from typing import List, NamedTuple, Optional
 
 
 class ClimateDevice(NamedTuple):
@@ -21,6 +21,9 @@ class ClimateDevice(NamedTuple):
     supported_features: int
     device_class: str
     data: dict
+    manufacturer: str
+    model: Optional[str]
+    sw_version: Optional[str]
 
 
 class BinarySensorDevice(NamedTuple):
@@ -30,3 +33,6 @@ class BinarySensorDevice(NamedTuple):
     is_on: bool
     device_class: str
     data: dict
+    manufacturer: str
+    model: Optional[str]
+    sw_version: Optional[str]
