@@ -24,6 +24,7 @@ class ClimateDevice(NamedTuple):
     manufacturer: str
     model: Optional[str]
     sw_version: Optional[str]
+    battery_level: Optional[int]
 
 
 class BinarySensorDevice(NamedTuple):
@@ -36,3 +37,4 @@ class BinarySensorDevice(NamedTuple):
     manufacturer: str
     model: Optional[str]
     sw_version: Optional[str]
+    battery_level: Optional[int]

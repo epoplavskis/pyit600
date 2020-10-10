@@ -55,7 +55,7 @@ class IT600Gateway:
         self._climate_devices: Dict[str, ClimateDevice] = {}
         self._climate_update_callbacks: List[Callable[[Any], Awaitable[None]]] = []
 
-        self._binary_sensor_devices: Dict[str, ClimateDevice] = {}
+        self._binary_sensor_devices: Dict[str, BinarySensorDevice] = {}
         self._binary_sensor_update_callbacks: List[Callable[[Any], Awaitable[None]]] = []
 
     async def connect(self) -> str:
@@ -92,7 +92,7 @@ class IT600Gateway:
             try:
                 with async_timeout.timeout(self._request_timeout):
                     await self._session.get(f"http://{self._host}:{self._port}/")
-            except Exception as e:
+            except Exception:
                 raise IT600ConnectionError(
                     "Error occurred while communicating with iT600 gateway: "
                     "check if you have specified host/IP address correctly"
@@ -125,6 +125,13 @@ class IT600Gateway:
 
         await self._refresh_binary_sensor_devices(sensors, send_callback)
 
+    @staticmethod
+    def _calc_battery_level_percent(sensor_status):
+        if sensor_status.get("sPowerS", {}).get("ErrorPowerSLowBattery", 0) == 1:
+            return 0
+
+        return None
+
     async def _refresh_binary_sensor_devices(self, sensors: List[Any], send_callback=False):
         local_sensors = {}
 
@@ -137,34 +144,35 @@ class IT600Gateway:
                 }
             )
 
-        for sensor_status in status["id"]:
-            is_on: Optional[bool] = sensor_status.get("sIASZS", {}).get("ErrorIASZSAlarmed1", None)
+            for sensor_status in status["id"]:
+                is_on: Optional[bool] = sensor_status.get("sIASZS", {}).get("ErrorIASZSAlarmed1", None)
 
-            if is_on is None:
-                continue
+                if is_on is None:
+                    continue
 
-            model: Optional[str] = sensor_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
+                model: Optional[str] = sensor_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
 
-            sensor = BinarySensorDevice(
-                available=True if sensor_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
-                name=json.loads(sensor_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
-                unique_id=sensor_status["data"]["UniID"],
-                is_on=True if is_on == 1 else False,
-                device_class="window" if (model == "SW600" or model == "OS600") else
+                sensor = BinarySensorDevice(
+                    available=True if sensor_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
+                    name=json.loads(sensor_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
+                    unique_id=sensor_status["data"]["UniID"],
+                    is_on=True if is_on == 1 else False,
+                    device_class="window" if (model == "SW600" or model == "OS600") else
                     "moisture" if model == "WLS600" else
                     "smoke" if model == "SmokeSensor-EM" else
                     None,
-                data=sensor_status["data"],
-                manufacturer=sensor_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
-                model=model,
-                sw_version=sensor_status.get("sZDO", {}).get("FirmwareVersion", None)
-            )
+                    data=sensor_status["data"],
+                    manufacturer=sensor_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
+                    model=model,
+                    sw_version=sensor_status.get("sZDO", {}).get("FirmwareVersion", None),
+                    battery_level=self._calc_battery_level_percent(sensor_status)
+                )
 
-            local_sensors[sensor.unique_id] = sensor
+                local_sensors[sensor.unique_id] = sensor
 
-            if send_callback:
-                self._binary_sensor_devices[sensor.unique_id] = sensor
-                await self._send_binary_sensor_update_callback(device_id=sensor.unique_id)
+                if send_callback:
+                    self._binary_sensor_devices[sensor.unique_id] = sensor
+                    await self._send_binary_sensor_update_callback(device_id=sensor.unique_id)
 
         self._binary_sensor_devices = local_sensors
         _LOGGER.debug("Refreshed %s sensor devices", len(self._binary_sensor_devices))
@@ -207,7 +215,8 @@ class IT600Gateway:
                     data=thermostat_status["data"],
                     manufacturer=thermostat_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
                     model=thermostat_status.get("DeviceL", {}).get("ModelIdentifier_i", None),
-                    sw_version=thermostat_status.get("sZDO", {}).get("FirmwareVersion", None)
+                    sw_version=thermostat_status.get("sZDO", {}).get("FirmwareVersion", None),
+                    battery_level=self._calc_battery_level_percent(thermostat_status)
                 )
 
                 local_thermostats[thermostat.unique_id] = thermostat
