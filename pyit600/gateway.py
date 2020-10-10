@@ -138,23 +138,26 @@ class IT600Gateway:
             )
 
         for sensor_status in status["id"]:
-            se = sensor_status.get("sIASZS", None)
+            is_on: Optional[bool] = sensor_status.get("sIASZS", {}).get("ErrorIASZSAlarmed1", None)
 
-            if se is None or sensor_status.get("sIASZS", {}).get("ErrorIASZSAlarmed1", None) is None:
+            if is_on is None:
                 continue
 
-            model = sensor_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
+            model: Optional[str] = sensor_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
 
             sensor = BinarySensorDevice(
                 available=True if sensor_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
                 name=json.loads(sensor_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
                 unique_id=sensor_status["data"]["UniID"],
-                is_on=True if sensor_status["sIASZS"]["ErrorIASZSAlarmed1"] == 1 else False,
+                is_on=True if is_on == 1 else False,
                 device_class="window" if (model == "SW600" or model == "OS600") else
                     "moisture" if model == "WLS600" else
                     "smoke" if model == "SmokeSensor-EM" else
                     None,
-                data=sensor_status["data"]
+                data=sensor_status["data"],
+                manufacturer=sensor_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
+                model=model,
+                sw_version=sensor_status.get("sZDO", {}).get("FirmwareVersion", None)
             )
 
             local_sensors[sensor.unique_id] = sensor
@@ -201,7 +204,10 @@ class IT600Gateway:
                     preset_modes=[PRESET_FOLLOW_SCHEDULE, PRESET_PERMANENT_HOLD, PRESET_OFF],
                     supported_features=SUPPORT_TARGET_TEMPERATURE | SUPPORT_PRESET_MODE,
                     device_class="temperature",
-                    data=thermostat_status["data"]
+                    data=thermostat_status["data"],
+                    manufacturer=thermostat_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
+                    model=thermostat_status.get("DeviceL", {}).get("ModelIdentifier_i", None),
+                    sw_version=thermostat_status.get("sZDO", {}).get("FirmwareVersion", None)
                 )
 
                 local_thermostats[thermostat.unique_id] = thermostat
