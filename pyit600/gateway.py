@@ -418,6 +418,9 @@ class IT600Gateway:
     async def set_cover_position(self, device_id: str, position: int) -> None:
         """Public method to set position/level (where 0 means closed and 100 is fully open) on the specified cover device."""
 
+        if position < 0 or position > 100:
+            raise ValueError("position must be between 0 and 100 (both bounds inclusive)")
+
         device = self.get_cover_device(device_id)
 
         if device is None:

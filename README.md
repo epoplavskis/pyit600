@@ -49,6 +49,9 @@ async with IT600Gateway(host=args.host, euid=args.euid) as gateway:
  - get_switch_device(device_id)
  - turn_on_switch_device(device_id)
  - turn_off_switch_device(device_id)
+ - get_cover_devices()
+ - get_cover_device(device_id)
+ - set_cover_position(device_id, position)
 
 ### Supported devices
 
