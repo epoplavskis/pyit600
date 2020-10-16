@@ -20,6 +20,7 @@ from .const import (
     SUPPORT_PRESET_MODE,
     SUPPORT_TARGET_TEMPERATURE,
     TEMP_CELSIUS,
+    SUPPORT_SET_POSITION
 )
 from .encryptor import IT600Encryptor
 from .exceptions import (
@@ -27,7 +28,7 @@ from .exceptions import (
     IT600CommandError,
     IT600ConnectionError,
 )
-from .models import ClimateDevice, BinarySensorDevice, SwitchDevice
+from .models import ClimateDevice, BinarySensorDevice, SwitchDevice, CoverDevice
 
 _LOGGER = logging.getLogger("pyit600")
 
@@ -60,6 +61,9 @@ class IT600Gateway:
 
         self._switch_devices: Dict[str, SwitchDevice] = {}
         self._switch_update_callbacks: List[Callable[[Any], Awaitable[None]]] = []
+
+        self._cover_devices: Dict[str, CoverDevice] = {}
+        self._cover_update_callbacks: List[Callable[[Any], Awaitable[None]]] = []
 
     async def connect(self) -> str:
         """Public method for connecting to Salus universal gateway.
@@ -128,11 +132,69 @@ class IT600Gateway:
 
         await self._refresh_binary_sensor_devices(sensors, send_callback)
 
-        sensors = list(
+        switches = list(
             filter(lambda x: "sOnOffS" in x, all_devices["id"])
         )
 
-        await self._refresh_switch_devices(sensors, send_callback)
+        await self._refresh_switch_devices(switches, send_callback)
+
+        covers = list(
+            filter(lambda x: "sLevelS" in x, all_devices["id"])
+        )
+
+        await self._refresh_cover_devices(covers, send_callback)
+
+    async def _refresh_cover_devices(self, devices: List[Any], send_callback=False):
+        local_devices = {}
+
+        if devices:
+            status = await self._make_encrypted_request(
+                "read",
+                {
+                    "requestAttr": "deviceid",
+                    "id": [{"data": device["data"]} for device in devices]
+                }
+            )
+
+            for device_status in status["id"]:
+                if device_status.get("sButtonS", {}).get("Mode", None) == 0:
+                    continue  # Skip endpoints which are disabled
+
+                model: Optional[str] = device_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
+
+                current_position = device_status.get("sLevelS", {}).get("CurrentLevel", None)
+
+                move_to_level_f = device_status.get("sLevelS", {}).get("MoveToLevel_f", None)
+
+                if move_to_level_f is not None and len(move_to_level_f) >= 2:
+                    set_position = int(move_to_level_f[:2], 16)
+                else:
+                    set_position = None
+
+                device = CoverDevice(
+                    available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
+                    name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
+                    unique_id=device_status["data"]["UniID"],
+                    current_cover_position=current_position,
+                    is_opening=None if set_position is None else current_position < set_position,
+                    is_closing=None if set_position is None else current_position > set_position,
+                    is_closed=True if current_position == 0 else False,
+                    supported_features=SUPPORT_SET_POSITION,
+                    device_class=None,
+                    data=device_status["data"],
+                    manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
+                    model=model,
+                    sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
+                )
+
+                local_devices[device.unique_id] = device
+
+                if send_callback:
+                    self._cover_devices[device.unique_id] = device
+                    await self._send_cover_update_callback(device_id=device.unique_id)
+
+            self._cover_devices = local_devices
+            _LOGGER.debug("Refreshed %s cover devices", len(self._cover_devices))
 
     async def _refresh_switch_devices(self, devices: List[Any], send_callback=False):
         local_devices = {}
@@ -160,12 +222,12 @@ class IT600Gateway:
 
                 model: Optional[str] = device_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
 
-                id = device_status["data"]["UniID"] + "_" + str(device_status["data"]["Endpoint"])  # Double switches have a different endpoint id, but the same device id
+                unique_id = device_status["data"]["UniID"] + "_" + str(device_status["data"]["Endpoint"])  # Double switches have a different endpoint id, but the same device id
 
                 device = SwitchDevice(
                     available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
-                    name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": ' + json.dumps(id) + '}'))["deviceName"],
-                    unique_id=id,
+                    name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": ' + json.dumps(unique_id) + '}'))["deviceName"],
+                    unique_id=unique_id,
                     is_on=True if is_on == 1 else False,
                     device_class="outlet" if (model == "SP600" or model == "SPE600") else "switch",
                     data=device_status["data"],
@@ -304,6 +366,15 @@ class IT600Gateway:
         else:
             _LOGGER.error("Callback for switch updates has not been set")
 
+    async def _send_cover_update_callback(self, device_id: str) -> None:
+        """Internal method to notify all update callback subscribers."""
+
+        if self._cover_update_callbacks:
+            for update_callback in self._cover_update_callbacks:
+                await update_callback(device_id=device_id)
+        else:
+            _LOGGER.error("Callback for cover updates has not been set")
+
     def get_climate_devices(self) -> Dict[str, ClimateDevice]:
         """Public method to return the state of all Salus IT600 climate devices."""
 
@@ -333,6 +404,40 @@ class IT600Gateway:
         """Public method to return the state of the specified switch device."""
 
         return self._switch_devices.get(device_id)
+
+    def get_cover_devices(self) -> Dict[str, CoverDevice]:
+        """Public method to return the state of all Salus IT600 cover devices."""
+
+        return self._cover_devices
+
+    def get_cover_device(self, device_id: str) -> Optional[CoverDevice]:
+        """Public method to return the state of the specified cover device."""
+
+        return self._cover_devices.get(device_id)
+
+    async def set_cover_position(self, device_id: str, position: int) -> None:
+        """Public method to set position/level (where 0 means closed and 100 is fully open) on the specified cover device."""
+
+        device = self.get_cover_device(device_id)
+
+        if device is None:
+            _LOGGER.error("Cannot turn on: cover device not found with the specified id: %s", device_id)
+            return
+
+        await self._make_encrypted_request(
+            "write",
+            {
+                "requestAttr": "write",
+                "id": [
+                    {
+                        "data": device.data,
+                        "sLevelS": {
+                            "SetMoveToLevel": f"{format(position, '02x')}FFFF"
+                        },
+                    }
+                ],
+            },
+        )
 
     async def turn_on_switch_device(self, device_id: str) -> None:
         """Public method to turn on the specified switch device."""
@@ -470,6 +575,11 @@ class IT600Gateway:
         """Public method to add a switch callback subscriber."""
 
         self._switch_update_callbacks.append(method)
+
+    async def add_cover_update_callback(self, method: Callable[[Any], Awaitable[None]]) -> None:
+        """Public method to add a cover callback subscriber."""
+
+        self._cover_update_callbacks.append(method)
 
     async def _make_encrypted_request(self, command: str, request_body: dict) -> Any:
         """Makes encrypted Salus iT600 json request, decrypts and returns response."""

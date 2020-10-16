@@ -3,9 +3,12 @@
 # Temperature units
 TEMP_CELSIUS = "°C"
 
-# Supported features
+# Supported climate features
 SUPPORT_TARGET_TEMPERATURE = 1
 SUPPORT_PRESET_MODE = 16
+
+# Supported cover features
+SUPPORT_SET_POSITION = 4
 
 # HVAC modes
 HVAC_MODE_OFF = "off"

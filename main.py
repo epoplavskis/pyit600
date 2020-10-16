@@ -32,6 +32,10 @@ async def my_switch_callback(device_id):
     print("Got callback for switch device id: " + device_id)
 
 
+async def my_cover_callback(device_id):
+    print("Got callback for cover device id: " + device_id)
+
+
 async def main():
     logging.basicConfig(level=logging.DEBUG)
     parser = argparse.ArgumentParser(description="Commands: mode fan temp")
@@ -76,6 +80,7 @@ async def main():
         await gateway.add_climate_update_callback(my_climate_callback)
         await gateway.add_binary_sensor_update_callback(my_sensor_callback)
         await gateway.add_switch_update_callback(my_switch_callback)
+        await gateway.add_cover_update_callback(my_cover_callback)
 
         await gateway.poll_status(send_callback=True)
 
@@ -130,6 +135,23 @@ async def main():
                     await gateway.turn_off_switch_device(switch_device_id)
                 else:
                     await gateway.turn_on_switch_device(switch_device_id)
+
+        cover_devices = gateway.get_cover_devices()
+
+        if not cover_devices:
+            print(
+                """Warning: no cover devices found. Ensure that you have paired your cover(s) with gateway and you can see it in the official Salus app. If it works there, your cover might not be supported. If you want to help to get it supported, open GitHub issue and add your cover model number and output of this program. Be sure to run this program with --debug option.\n""")
+        else:
+            print("All cover devices:")
+            print(repr(cover_devices))
+
+            for cover_device_id in cover_devices:
+                print(f"Switch device {cover_device_id} status:")
+                device = switch_devices.get(cover_device_id)
+                print(repr(device))
+
+                print(f"Setting {cover_device_id} to 25%")
+                await gateway.set_cover_position(cover_device_id, 25)
 
 
 if __name__ == "__main__":

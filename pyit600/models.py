@@ -48,3 +48,19 @@ class SwitchDevice(NamedTuple):
     manufacturer: str
     model: Optional[str]
     sw_version: Optional[str]
+
+
+class CoverDevice(NamedTuple):
+    available: bool
+    name: str
+    unique_id: str
+    current_cover_position: Optional[int]
+    is_opening: Optional[bool]
+    is_closing: Optional[bool]
+    is_closed: bool
+    supported_features: int
+    device_class: Optional[str]
+    data: dict
+    manufacturer: str
+    model: Optional[str]
+    sw_version: Optional[str]
