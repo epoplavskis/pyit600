@@ -64,3 +64,16 @@ class CoverDevice(NamedTuple):
     manufacturer: str
     model: Optional[str]
     sw_version: Optional[str]
+
+
+class SensorDevice(NamedTuple):
+    available: bool
+    name: str
+    unique_id: str
+    state: str
+    unit_of_measurement: str
+    device_class: str
+    data: dict
+    manufacturer: str
+    model: Optional[str]
+    sw_version: Optional[str]
