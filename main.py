@@ -28,6 +28,10 @@ async def my_sensor_callback(device_id):
     print("Got callback for sensor device id: " + device_id)
 
 
+async def my_switch_callback(device_id):
+    print("Got callback for switch device id: " + device_id)
+
+
 async def main():
     logging.basicConfig(level=logging.DEBUG)
     parser = argparse.ArgumentParser(description="Commands: mode fan temp")
@@ -71,6 +75,7 @@ async def main():
 
         await gateway.add_climate_update_callback(my_climate_callback)
         await gateway.add_binary_sensor_update_callback(my_sensor_callback)
+        await gateway.add_switch_update_callback(my_switch_callback)
 
         await gateway.poll_status(send_callback=True)
 
@@ -105,6 +110,26 @@ async def main():
                 print(repr(device))
 
                 print(f"'{device.name}' is on: {device.is_on}")
+
+        switch_devices = gateway.get_switch_devices()
+
+        if not switch_devices:
+            print(
+                """Warning: no switch devices found. Ensure that you have paired your switch(es) with gateway and you can see it in the official Salus app. If it works there, your switch might not be supported. If you want to help to get it supported, open GitHub issue and add your switch model number and output of this program. Be sure to run this program with --debug option.\n""")
+        else:
+            print("All switch devices:")
+            print(repr(switch_devices))
+
+            for switch_device_id in switch_devices:
+                print(f"Switch device {switch_device_id} status:")
+                device = switch_devices.get(switch_device_id)
+                print(repr(device))
+
+                print(f"Toggling device {switch_device_id}")
+                if device.is_on:
+                    await gateway.turn_off_switch_device(switch_device_id)
+                else:
+                    await gateway.turn_on_switch_device(switch_device_id)
 
 
 if __name__ == "__main__":

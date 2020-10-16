@@ -2,7 +2,7 @@
 
 ## About
 
-This package allows you to control and monitor your Salus iT600 smart home devices locally through Salus UG600 universal gateway. Currently only heating thermostats and some sensors are supported. You have any other devices and would like to contribute - you are welcome to create an issue or submit a pull request.
+This package allows you to control and monitor your Salus iT600 smart home devices locally through Salus UG600 universal gateway. Currently heating thermostats, sensors and switches are supported. You have any other devices and would like to contribute - you are welcome to create an issue or submit a pull request.
 
 ## Installation
 
@@ -45,6 +45,10 @@ async with IT600Gateway(host=args.host, euid=args.euid) as gateway:
  - set_climate_device_temperature(device_id, setpoint_celsius)
  - get_binary_sensor_devices()
  - get_binary_sensor_device(device_id)
+ - get_switch_devices()
+ - get_switch_device(device_id)
+ - turn_on_switch_device(device_id)
+ - turn_off_switch_device(device_id)
 
 ### Supported devices
 
@@ -62,6 +66,14 @@ These sensors have not been tested, but may work:
 * WLS600
 * OS600
 * SD600
+
+These switch devices have been tested:
+* SPE600
+* RS600 (when operating as a single/double switch)
+
+These switch devices have not been tested, but may work:
+* SR600
+* SP600
 
 ### Contributing
 

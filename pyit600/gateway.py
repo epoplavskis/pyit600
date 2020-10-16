@@ -27,7 +27,7 @@ from .exceptions import (
     IT600CommandError,
     IT600ConnectionError,
 )
-from .models import ClimateDevice, BinarySensorDevice
+from .models import ClimateDevice, BinarySensorDevice, SwitchDevice
 
 _LOGGER = logging.getLogger("pyit600")
 
@@ -55,8 +55,11 @@ class IT600Gateway:
         self._climate_devices: Dict[str, ClimateDevice] = {}
         self._climate_update_callbacks: List[Callable[[Any], Awaitable[None]]] = []
 
-        self._binary_sensor_devices: Dict[str, ClimateDevice] = {}
+        self._binary_sensor_devices: Dict[str, BinarySensorDevice] = {}
         self._binary_sensor_update_callbacks: List[Callable[[Any], Awaitable[None]]] = []
+
+        self._switch_devices: Dict[str, SwitchDevice] = {}
+        self._switch_update_callbacks: List[Callable[[Any], Awaitable[None]]] = []
 
     async def connect(self) -> str:
         """Public method for connecting to Salus universal gateway.
@@ -92,7 +95,7 @@ class IT600Gateway:
             try:
                 with async_timeout.timeout(self._request_timeout):
                     await self._session.get(f"http://{self._host}:{self._port}/")
-            except Exception as e:
+            except Exception:
                 raise IT600ConnectionError(
                     "Error occurred while communicating with iT600 gateway: "
                     "check if you have specified host/IP address correctly"
@@ -125,72 +128,127 @@ class IT600Gateway:
 
         await self._refresh_binary_sensor_devices(sensors, send_callback)
 
-    async def _refresh_binary_sensor_devices(self, sensors: List[Any], send_callback=False):
-        local_sensors = {}
+        sensors = list(
+            filter(lambda x: "sOnOffS" in x, all_devices["id"])
+        )
 
-        if sensors:
+        await self._refresh_switch_devices(sensors, send_callback)
+
+    async def _refresh_switch_devices(self, devices: List[Any], send_callback=False):
+        local_devices = {}
+
+        if devices:
             status = await self._make_encrypted_request(
                 "read",
                 {
                     "requestAttr": "deviceid",
-                    "id": [{"data": sensor["data"]} for sensor in sensors]
+                    "id": [{"data": device["data"]} for device in devices]
                 }
             )
 
-            for sensor_status in status["id"]:
-                is_on: Optional[bool] = sensor_status.get("sIASZS", {}).get("ErrorIASZSAlarmed1", None)
+            for device_status in status["id"]:
+                if device_status.get("sLevelS", None) is not None:
+                    continue  # Skip roller shutter endpoint in combined roller shutter/relay device
+
+                if device_status.get("sButtonS", {}).get("Mode", None) == 0:
+                    continue  # Skip endpoints which are disabled
+
+                is_on: Optional[bool] = device_status.get("sOnOffS", {}).get("OnOff", None)
 
                 if is_on is None:
                     continue
 
-                model: Optional[str] = sensor_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
+                model: Optional[str] = device_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
 
-                sensor = BinarySensorDevice(
-                    available=True if sensor_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
-                    name=json.loads(sensor_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
-                    unique_id=sensor_status["data"]["UniID"],
+                id = device_status["data"]["UniID"] + "_" + str(device_status["data"]["Endpoint"])  # Double switches have a different endpoint id, but the same device id
+
+                device = SwitchDevice(
+                    available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
+                    name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": ' + json.dumps(id) + '}'))["deviceName"],
+                    unique_id=id,
+                    is_on=True if is_on == 1 else False,
+                    device_class="outlet" if (model == "SP600" or model == "SPE600") else "switch",
+                    data=device_status["data"],
+                    manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
+                    model=model,
+                    sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
+                )
+
+                local_devices[device.unique_id] = device
+
+                if send_callback:
+                    self._switch_devices[device.unique_id] = device
+                    await self._send_switch_update_callback(device_id=device.unique_id)
+
+            self._switch_devices = local_devices
+            _LOGGER.debug("Refreshed %s sensor devices", len(self._switch_devices))
+
+    async def _refresh_binary_sensor_devices(self, devices: List[Any], send_callback=False):
+        local_devices = {}
+
+        if devices:
+            status = await self._make_encrypted_request(
+                "read",
+                {
+                    "requestAttr": "deviceid",
+                    "id": [{"data": device["data"]} for device in devices]
+                }
+            )
+
+            for device_status in status["id"]:
+                is_on: Optional[bool] = device_status.get("sIASZS", {}).get("ErrorIASZSAlarmed1", None)
+
+                if is_on is None:
+                    continue
+
+                model: Optional[str] = device_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
+
+                device = BinarySensorDevice(
+                    available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
+                    name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
+                    unique_id=device_status["data"]["UniID"],
                     is_on=True if is_on == 1 else False,
                     device_class="window" if (model == "SW600" or model == "OS600") else
                         "moisture" if model == "WLS600" else
                         "smoke" if model == "SmokeSensor-EM" else
                         None,
-                    data=sensor_status["data"],
-                    manufacturer=sensor_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
+                    data=device_status["data"],
+                    manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
                     model=model,
-                    sw_version=sensor_status.get("sZDO", {}).get("FirmwareVersion", None)
+                    sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
                 )
 
-                local_sensors[sensor.unique_id] = sensor
+                local_devices[device.unique_id] = device
 
                 if send_callback:
-                    self._binary_sensor_devices[sensor.unique_id] = sensor
-                    await self._send_binary_sensor_update_callback(device_id=sensor.unique_id)
+                    self._binary_sensor_devices[device.unique_id] = device
+                    await self._send_binary_sensor_update_callback(device_id=device.unique_id)
 
-            self._binary_sensor_devices = local_sensors
+            self._binary_sensor_devices = local_devices
             _LOGGER.debug("Refreshed %s sensor devices", len(self._binary_sensor_devices))
 
-    async def _refresh_climate_devices(self, thermostats: List[Any], send_callback=False):
-        local_thermostats = {}
+    async def _refresh_climate_devices(self, devices: List[Any], send_callback=False):
+        local_devices = {}
 
-        if thermostats:
+        if devices:
             status = await self._make_encrypted_request(
                 "read",
                 {
                     "requestAttr": "deviceid",
-                    "id": [{"data": thermostat["data"]} for thermostat in thermostats]
+                    "id": [{"data": device["data"]} for device in devices]
                 }
             )
 
-            for thermostat_status in status["id"]:
-                th = thermostat_status.get("sIT600TH", None)
+            for device_status in status["id"]:
+                th = device_status.get("sIT600TH", None)
 
                 if th is None:
                     continue
 
-                thermostat = ClimateDevice(
-                    available=True if thermostat_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
-                    name=json.loads(thermostat_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
-                    unique_id=thermostat_status["data"]["UniID"],
+                device = ClimateDevice(
+                    available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
+                    name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
+                    unique_id=device_status["data"]["UniID"],
                     temperature_unit=TEMP_CELSIUS,  # API always reports temperature as celsius
                     precision=0.5,
                     current_temperature=th["LocalTemperature_x100"] / 100,
@@ -204,27 +262,27 @@ class IT600Gateway:
                     preset_modes=[PRESET_FOLLOW_SCHEDULE, PRESET_PERMANENT_HOLD, PRESET_OFF],
                     supported_features=SUPPORT_TARGET_TEMPERATURE | SUPPORT_PRESET_MODE,
                     device_class="temperature",
-                    data=thermostat_status["data"],
-                    manufacturer=thermostat_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
-                    model=thermostat_status.get("DeviceL", {}).get("ModelIdentifier_i", None),
-                    sw_version=thermostat_status.get("sZDO", {}).get("FirmwareVersion", None)
+                    data=device_status["data"],
+                    manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
+                    model=device_status.get("DeviceL", {}).get("ModelIdentifier_i", None),
+                    sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
                 )
 
-                local_thermostats[thermostat.unique_id] = thermostat
+                local_devices[device.unique_id] = device
 
                 if send_callback:
-                    self._climate_devices[thermostat.unique_id] = thermostat
-                    await self._send_climate_update_callback(device_id=thermostat.unique_id)
+                    self._climate_devices[device.unique_id] = device
+                    await self._send_climate_update_callback(device_id=device.unique_id)
 
-        self._climate_devices = local_thermostats
+        self._climate_devices = local_devices
         _LOGGER.debug("Refreshed %s climate devices", len(self._climate_devices))
 
     async def _send_climate_update_callback(self, device_id: str) -> None:
         """Internal method to notify all update callback subscribers."""
 
         if self._climate_update_callbacks:
-            for climate_callback in self._climate_update_callbacks:
-                await climate_callback(device_id=device_id)
+            for update_callback in self._climate_update_callbacks:
+                await update_callback(device_id=device_id)
         else:
             _LOGGER.error("Callback for climate updates has not been set")
 
@@ -232,10 +290,19 @@ class IT600Gateway:
         """Internal method to notify all update callback subscribers."""
 
         if self._binary_sensor_update_callbacks:
-            for sensor_callback in self._binary_sensor_update_callbacks:
-                await sensor_callback(device_id=device_id)
+            for update_callback in self._binary_sensor_update_callbacks:
+                await update_callback(device_id=device_id)
         else:
             _LOGGER.error("Callback for sensor updates has not been set")
+
+    async def _send_switch_update_callback(self, device_id: str) -> None:
+        """Internal method to notify all update callback subscribers."""
+
+        if self._switch_update_callbacks:
+            for update_callback in self._switch_update_callbacks:
+                await update_callback(device_id=device_id)
+        else:
+            _LOGGER.error("Callback for switch updates has not been set")
 
     def get_climate_devices(self) -> Dict[str, ClimateDevice]:
         """Public method to return the state of all Salus IT600 climate devices."""
@@ -256,6 +323,64 @@ class IT600Gateway:
         """Public method to return the state of the specified sensor device."""
 
         return self._binary_sensor_devices.get(device_id)
+
+    def get_switch_devices(self) -> Dict[str, SwitchDevice]:
+        """Public method to return the state of all Salus IT600 switch devices."""
+
+        return self._switch_devices
+
+    def get_switch_device(self, device_id: str) -> Optional[SwitchDevice]:
+        """Public method to return the state of the specified switch device."""
+
+        return self._switch_devices.get(device_id)
+
+    async def turn_on_switch_device(self, device_id: str) -> None:
+        """Public method to turn on the specified switch device."""
+
+        device = self.get_switch_device(device_id)
+
+        if device is None:
+            _LOGGER.error("Cannot turn on: switch device not found with the specified id: %s", device_id)
+            return
+
+        await self._make_encrypted_request(
+            "write",
+            {
+                "requestAttr": "write",
+                "id": [
+                    {
+                        "data": device.data,
+                        "sOnOffS": {
+                            "SetOnOff": 1
+                        },
+                    }
+                ],
+            },
+        )
+
+    async def turn_off_switch_device(self, device_id: str) -> None:
+        """Public method to turn off the specified switch device."""
+
+        device = self.get_switch_device(device_id)
+
+        if device is None:
+            _LOGGER.error("Cannot turn off: switch device not found with the specified id: %s", device_id)
+            return
+
+        await self._make_encrypted_request(
+            "write",
+            {
+                "requestAttr": "write",
+                "id": [
+                    {
+                        "data": device.data,
+                        "sOnOffS": {
+                            "SetOnOff": 0
+                        },
+                    }
+                ],
+            },
+        )
 
     async def set_climate_device_preset(self, device_id: str, preset: str) -> None:
         """Public method for setting the hvac preset."""
@@ -340,6 +465,11 @@ class IT600Gateway:
         """Public method to add a sensor callback subscriber."""
 
         self._binary_sensor_update_callbacks.append(method)
+
+    async def add_switch_update_callback(self, method: Callable[[Any], Awaitable[None]]) -> None:
+        """Public method to add a switch callback subscriber."""
+
+        self._switch_update_callbacks.append(method)
 
     async def _make_encrypted_request(self, command: str, request_body: dict) -> Any:
         """Makes encrypted Salus iT600 json request, decrypts and returns response."""

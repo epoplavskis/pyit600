@@ -36,3 +36,15 @@ class BinarySensorDevice(NamedTuple):
     manufacturer: str
     model: Optional[str]
     sw_version: Optional[str]
+
+
+class SwitchDevice(NamedTuple):
+    available: bool
+    name: str
+    unique_id: str
+    is_on: bool
+    device_class: str
+    data: dict
+    manufacturer: str
+    model: Optional[str]
+    sw_version: Optional[str]
