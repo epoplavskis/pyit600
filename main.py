@@ -100,18 +100,18 @@ async def main():
                 print(f"Setting heating device {climate_device_id} temperature to 21 degrees celsius")
                 await gateway.set_climate_device_temperature(climate_device_id, 21)
 
-        sensor_devices = gateway.get_binary_sensor_devices()
+        binary_sensor_devices = gateway.get_binary_sensor_devices()
 
-        if not sensor_devices:
+        if not binary_sensor_devices:
             print(
-                """Warning: no sensor devices found. Ensure that you have paired your sensor(s) with gateway and you can see it in the official Salus app. If it works there, your sensor might not be supported. If you want to help to get it supported, open GitHub issue and add your sensor model number and output of this program. Be sure to run this program with --debug option.\n""")
+                """Warning: no binary sensor devices found. Ensure that you have paired your binary sensor(s) with gateway and you can see it in the official Salus app. If it works there, your sensor might not be supported. If you want to help to get it supported, open GitHub issue and add your binary sensor model number and output of this program. Be sure to run this program with --debug option.\n""")
         else:
-            print("All sensor devices:")
-            print(repr(sensor_devices))
+            print("All binary sensor devices:")
+            print(repr(binary_sensor_devices))
 
-            for sensor_device_id in sensor_devices:
-                print(f"Sensor device {sensor_device_id} status:")
-                device = sensor_devices.get(sensor_device_id)
+            for binary_sensor_device_id in binary_sensor_devices:
+                print(f"Binary sensor device {binary_sensor_device_id} status:")
+                device = binary_sensor_devices.get(binary_sensor_device_id)
                 print(repr(device))
 
                 print(f"'{device.name}' is on: {device.is_on}")
@@ -145,13 +145,27 @@ async def main():
             print("All cover devices:")
             print(repr(cover_devices))
 
-            for cover_device_id in cover_devices:
-                print(f"Switch device {cover_device_id} status:")
-                device = switch_devices.get(cover_device_id)
+            for sensor_device_id in cover_devices:
+                print(f"Switch device {sensor_device_id} status:")
+                device = switch_devices.get(sensor_device_id)
                 print(repr(device))
 
-                print(f"Setting {cover_device_id} to 25%")
-                await gateway.set_cover_position(cover_device_id, 25)
+                print(f"Setting {sensor_device_id} to 25%")
+                await gateway.set_cover_position(sensor_device_id, 25)
+
+        sensor_devices = gateway.get_sensor_devices()
+
+        if not sensor_devices:
+            print(
+                """Warning: no sensor devices found. Ensure that you have paired your sensor(s) with gateway and you can see it in the official Salus app. If it works there, your cover might not be supported. If you want to help to get it supported, open GitHub issue and add your sensor model number and output of this program. Be sure to run this program with --debug option.\n""")
+        else:
+            print("All sensor devices:")
+            print(repr(sensor_devices))
+
+            for sensor_device_id in sensor_devices:
+                print(f"Sensor device {sensor_device_id} status:")
+                device = sensor_devices.get(sensor_device_id)
+                print(repr(device))
 
 
 if __name__ == "__main__":

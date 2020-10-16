@@ -1,7 +1,13 @@
 """Constants for the Salus iT600 smart devices."""
 
+# Degree units
+DEGREE = "°"
+
 # Temperature units
-TEMP_CELSIUS = "°C"
+TEMP_CELSIUS = f"{DEGREE}C"
+
+# States
+STATE_UNKNOWN = "unknown"
 
 # Supported climate features
 SUPPORT_TARGET_TEMPERATURE = 1
