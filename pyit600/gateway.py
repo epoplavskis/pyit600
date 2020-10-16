@@ -137,37 +137,37 @@ class IT600Gateway:
                 }
             )
 
-        for sensor_status in status["id"]:
-            is_on: Optional[bool] = sensor_status.get("sIASZS", {}).get("ErrorIASZSAlarmed1", None)
+            for sensor_status in status["id"]:
+                is_on: Optional[bool] = sensor_status.get("sIASZS", {}).get("ErrorIASZSAlarmed1", None)
 
-            if is_on is None:
-                continue
+                if is_on is None:
+                    continue
 
-            model: Optional[str] = sensor_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
+                model: Optional[str] = sensor_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
 
-            sensor = BinarySensorDevice(
-                available=True if sensor_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
-                name=json.loads(sensor_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
-                unique_id=sensor_status["data"]["UniID"],
-                is_on=True if is_on == 1 else False,
-                device_class="window" if (model == "SW600" or model == "OS600") else
-                    "moisture" if model == "WLS600" else
-                    "smoke" if model == "SmokeSensor-EM" else
-                    None,
-                data=sensor_status["data"],
-                manufacturer=sensor_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
-                model=model,
-                sw_version=sensor_status.get("sZDO", {}).get("FirmwareVersion", None)
-            )
+                sensor = BinarySensorDevice(
+                    available=True if sensor_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
+                    name=json.loads(sensor_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
+                    unique_id=sensor_status["data"]["UniID"],
+                    is_on=True if is_on == 1 else False,
+                    device_class="window" if (model == "SW600" or model == "OS600") else
+                        "moisture" if model == "WLS600" else
+                        "smoke" if model == "SmokeSensor-EM" else
+                        None,
+                    data=sensor_status["data"],
+                    manufacturer=sensor_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
+                    model=model,
+                    sw_version=sensor_status.get("sZDO", {}).get("FirmwareVersion", None)
+                )
 
-            local_sensors[sensor.unique_id] = sensor
+                local_sensors[sensor.unique_id] = sensor
 
-            if send_callback:
-                self._binary_sensor_devices[sensor.unique_id] = sensor
-                await self._send_binary_sensor_update_callback(device_id=sensor.unique_id)
+                if send_callback:
+                    self._binary_sensor_devices[sensor.unique_id] = sensor
+                    await self._send_binary_sensor_update_callback(device_id=sensor.unique_id)
 
-        self._binary_sensor_devices = local_sensors
-        _LOGGER.debug("Refreshed %s sensor devices", len(self._binary_sensor_devices))
+            self._binary_sensor_devices = local_sensors
+            _LOGGER.debug("Refreshed %s sensor devices", len(self._binary_sensor_devices))
 
     async def _refresh_climate_devices(self, thermostats: List[Any], send_callback=False):
         local_thermostats = {}
