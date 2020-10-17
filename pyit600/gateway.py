@@ -315,7 +315,7 @@ class IT600Gateway:
                         available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
                         name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
                         unique_id=device_status["data"]["UniID"],
-                        state=format(temperature / 100, '.2f') if True else STATE_UNKNOWN,
+                        state=(temperature / 100),
                         unit_of_measurement=TEMP_CELSIUS,
                         device_class="temperature",
                         data=device_status["data"],
