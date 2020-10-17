@@ -123,35 +123,50 @@ class IT600Gateway:
             }
         )
 
-        thermostats = list(
-            filter(lambda x: "sIT600TH" in x, all_devices["id"])
-        )
+        try:
+            climate_devices = list(
+                filter(lambda x: "sIT600TH" in x, all_devices["id"])
+            )
 
-        await self._refresh_climate_devices(thermostats, send_callback)
+            await self._refresh_climate_devices(climate_devices, send_callback)
+        except BaseException as e:
+            _LOGGER.error("Failed to poll climate devices", exc_info=e)
 
-        binary_sensors = list(
-            filter(lambda x: "sIASZS" in x, all_devices["id"])
-        )
+        try:
+            binary_sensors = list(
+                filter(lambda x: "sIASZS" in x, all_devices["id"])
+            )
 
-        await self._refresh_binary_sensor_devices(binary_sensors, send_callback)
+            await self._refresh_binary_sensor_devices(binary_sensors, send_callback)
+        except BaseException as e:
+            _LOGGER.error("Failed to poll binary sensors", exc_info=e)
 
-        sensors = list(
-            filter(lambda x: "sTempS" in x, all_devices["id"])
-        )
+        try:
+            sensors = list(
+                filter(lambda x: "sTempS" in x, all_devices["id"])
+            )
 
-        await self._refresh_sensor_devices(sensors, send_callback)
+            await self._refresh_sensor_devices(sensors, send_callback)
+        except BaseException as e:
+            _LOGGER.error("Failed to poll sensors", exc_info=e)
 
-        switches = list(
-            filter(lambda x: "sOnOffS" in x, all_devices["id"])
-        )
+        try:
+            switches = list(
+                filter(lambda x: "sOnOffS" in x, all_devices["id"])
+            )
 
-        await self._refresh_switch_devices(switches, send_callback)
+            await self._refresh_switch_devices(switches, send_callback)
+        except BaseException as e:
+            _LOGGER.error("Failed to poll switches", exc_info=e)
 
-        covers = list(
-            filter(lambda x: "sLevelS" in x, all_devices["id"])
-        )
+        try:
+            covers = list(
+                filter(lambda x: "sLevelS" in x, all_devices["id"])
+            )
 
-        await self._refresh_cover_devices(covers, send_callback)
+            await self._refresh_cover_devices(covers, send_callback)
+        except BaseException as e:
+            _LOGGER.error("Failed to poll covers", exc_info=e)
 
     async def _refresh_cover_devices(self, devices: List[Any], send_callback=False):
         local_devices = {}
@@ -166,41 +181,49 @@ class IT600Gateway:
             )
 
             for device_status in status["id"]:
-                if device_status.get("sButtonS", {}).get("Mode", None) == 0:
-                    continue  # Skip endpoints which are disabled
+                unique_id = device_status.get("data", {}).get("UniID", None)
 
-                model: Optional[str] = device_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
+                if unique_id is None:
+                    continue
 
-                current_position = device_status.get("sLevelS", {}).get("CurrentLevel", None)
+                try:
+                    if device_status.get("sButtonS", {}).get("Mode", None) == 0:
+                        continue  # Skip endpoints which are disabled
 
-                move_to_level_f = device_status.get("sLevelS", {}).get("MoveToLevel_f", None)
+                    model: Optional[str] = device_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
 
-                if move_to_level_f is not None and len(move_to_level_f) >= 2:
-                    set_position = int(move_to_level_f[:2], 16)
-                else:
-                    set_position = None
+                    current_position = device_status.get("sLevelS", {}).get("CurrentLevel", None)
 
-                device = CoverDevice(
-                    available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
-                    name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
-                    unique_id=device_status["data"]["UniID"],
-                    current_cover_position=current_position,
-                    is_opening=None if set_position is None else current_position < set_position,
-                    is_closing=None if set_position is None else current_position > set_position,
-                    is_closed=True if current_position == 0 else False,
-                    supported_features=SUPPORT_SET_POSITION,
-                    device_class=None,
-                    data=device_status["data"],
-                    manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
-                    model=model,
-                    sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
-                )
+                    move_to_level_f = device_status.get("sLevelS", {}).get("MoveToLevel_f", None)
 
-                local_devices[device.unique_id] = device
+                    if move_to_level_f is not None and len(move_to_level_f) >= 2:
+                        set_position = int(move_to_level_f[:2], 16)
+                    else:
+                        set_position = None
 
-                if send_callback:
-                    self._cover_devices[device.unique_id] = device
-                    await self._send_cover_update_callback(device_id=device.unique_id)
+                    device = CoverDevice(
+                        available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
+                        name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
+                        unique_id=unique_id,
+                        current_cover_position=current_position,
+                        is_opening=None if set_position is None else current_position < set_position,
+                        is_closing=None if set_position is None else current_position > set_position,
+                        is_closed=True if current_position == 0 else False,
+                        supported_features=SUPPORT_SET_POSITION,
+                        device_class=None,
+                        data=device_status["data"],
+                        manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
+                        model=model,
+                        sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
+                    )
+
+                    local_devices[device.unique_id] = device
+
+                    if send_callback:
+                        self._cover_devices[device.unique_id] = device
+                        await self._send_cover_update_callback(device_id=device.unique_id)
+                except BaseException as e:
+                    _LOGGER.error(f"Failed to poll device {unique_id}", exc_info=e)
 
             self._cover_devices = local_devices
             _LOGGER.debug("Refreshed %s cover devices", len(self._cover_devices))
@@ -218,38 +241,46 @@ class IT600Gateway:
             )
 
             for device_status in status["id"]:
-                if device_status.get("sLevelS", None) is not None:
-                    continue  # Skip roller shutter endpoint in combined roller shutter/relay device
+                unique_id = device_status.get("data", {}).get("UniID", None)
 
-                if device_status.get("sButtonS", {}).get("Mode", None) == 0:
-                    continue  # Skip endpoints which are disabled
-
-                is_on: Optional[bool] = device_status.get("sOnOffS", {}).get("OnOff", None)
-
-                if is_on is None:
+                if unique_id is None:
                     continue
+                else:
+                    unique_id = unique_id + "_" + str(device_status["data"]["Endpoint"])  # Double switches have a different endpoint id, but the same device id
 
-                model: Optional[str] = device_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
+                try:
+                    if device_status.get("sLevelS", None) is not None:
+                        continue  # Skip roller shutter endpoint in combined roller shutter/relay device
 
-                unique_id = device_status["data"]["UniID"] + "_" + str(device_status["data"]["Endpoint"])  # Double switches have a different endpoint id, but the same device id
+                    if device_status.get("sButtonS", {}).get("Mode", None) == 0:
+                        continue  # Skip endpoints which are disabled
 
-                device = SwitchDevice(
-                    available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
-                    name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": ' + json.dumps(unique_id) + '}'))["deviceName"],
-                    unique_id=unique_id,
-                    is_on=True if is_on == 1 else False,
-                    device_class="outlet" if (model == "SP600" or model == "SPE600") else "switch",
-                    data=device_status["data"],
-                    manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
-                    model=model,
-                    sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
-                )
+                    is_on: Optional[bool] = device_status.get("sOnOffS", {}).get("OnOff", None)
 
-                local_devices[device.unique_id] = device
+                    if is_on is None:
+                        continue
 
-                if send_callback:
-                    self._switch_devices[device.unique_id] = device
-                    await self._send_switch_update_callback(device_id=device.unique_id)
+                    model: Optional[str] = device_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
+
+                    device = SwitchDevice(
+                        available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
+                        name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": ' + json.dumps(unique_id) + '}'))["deviceName"],
+                        unique_id=unique_id,
+                        is_on=True if is_on == 1 else False,
+                        device_class="outlet" if (model == "SP600" or model == "SPE600") else "switch",
+                        data=device_status["data"],
+                        manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
+                        model=model,
+                        sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
+                    )
+
+                    local_devices[device.unique_id] = device
+
+                    if send_callback:
+                        self._switch_devices[device.unique_id] = device
+                        await self._send_switch_update_callback(device_id=device.unique_id)
+                except BaseException as e:
+                    _LOGGER.error(f"Failed to poll device {unique_id}", exc_info=e)
 
             self._switch_devices = local_devices
             _LOGGER.debug("Refreshed %s sensor devices", len(self._switch_devices))
@@ -267,31 +298,39 @@ class IT600Gateway:
             )
 
             for device_status in status["id"]:
-                temperature: Optional[int] = device_status.get("sTempS", {}).get("MeasuredValue_x100", None)
+                unique_id = device_status.get("data", {}).get("UniID", None)
 
-                if temperature is None:
+                if unique_id is None:
                     continue
 
-                model: Optional[str] = device_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
+                try:
+                    temperature: Optional[int] = device_status.get("sTempS", {}).get("MeasuredValue_x100", None)
 
-                device = SensorDevice(
-                    available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
-                    name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
-                    unique_id=device_status["data"]["UniID"],
-                    state=format(temperature / 100, '.2f') if True else STATE_UNKNOWN,
-                    unit_of_measurement=TEMP_CELSIUS,
-                    device_class="temperature",
-                    data=device_status["data"],
-                    manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
-                    model=model,
-                    sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
-                )
+                    if temperature is None:
+                        continue
 
-                local_devices[device.unique_id] = device
+                    model: Optional[str] = device_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
 
-                if send_callback:
-                    self._sensor_devices[device.unique_id] = device
-                    await self._send_sensor_update_callback(device_id=device.unique_id)
+                    device = SensorDevice(
+                        available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
+                        name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
+                        unique_id=device_status["data"]["UniID"],
+                        state=format(temperature / 100, '.2f') if True else STATE_UNKNOWN,
+                        unit_of_measurement=TEMP_CELSIUS,
+                        device_class="temperature",
+                        data=device_status["data"],
+                        manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
+                        model=model,
+                        sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
+                    )
+
+                    local_devices[device.unique_id] = device
+
+                    if send_callback:
+                        self._sensor_devices[device.unique_id] = device
+                        await self._send_sensor_update_callback(device_id=device.unique_id)
+                except BaseException as e:
+                    _LOGGER.error(f"Failed to poll device {unique_id}", exc_info=e)
 
             self._sensor_devices = local_devices
             _LOGGER.debug("Refreshed %s sensor devices", len(self._sensor_devices))
@@ -309,36 +348,44 @@ class IT600Gateway:
             )
 
             for device_status in status["id"]:
-                if device_status.get("sTempS", None) is not None:
-                    continue  # Skip temperature sensors (eg. PS600 pipe sensor)
+                unique_id = device_status.get("data", {}).get("UniID", None)
 
-                is_on: Optional[bool] = device_status.get("sIASZS", {}).get("ErrorIASZSAlarmed1", None)
-
-                if is_on is None:
+                if unique_id is None:
                     continue
 
-                model: Optional[str] = device_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
+                try:
+                    if device_status.get("sTempS", None) is not None:
+                        continue  # Skip temperature sensors (eg. PS600 pipe sensor)
 
-                device = BinarySensorDevice(
-                    available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
-                    name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
-                    unique_id=device_status["data"]["UniID"],
-                    is_on=True if is_on == 1 else False,
-                    device_class="window" if (model == "SW600" or model == "OS600") else
-                        "moisture" if model == "WLS600" else
-                        "smoke" if model == "SmokeSensor-EM" else
-                        None,
-                    data=device_status["data"],
-                    manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
-                    model=model,
-                    sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
-                )
+                    is_on: Optional[bool] = device_status.get("sIASZS", {}).get("ErrorIASZSAlarmed1", None)
 
-                local_devices[device.unique_id] = device
+                    if is_on is None:
+                        continue
 
-                if send_callback:
-                    self._binary_sensor_devices[device.unique_id] = device
-                    await self._send_binary_sensor_update_callback(device_id=device.unique_id)
+                    model: Optional[str] = device_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
+
+                    device = BinarySensorDevice(
+                        available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
+                        name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
+                        unique_id=device_status["data"]["UniID"],
+                        is_on=True if is_on == 1 else False,
+                        device_class="window" if (model == "SW600" or model == "OS600") else
+                            "moisture" if model == "WLS600" else
+                            "smoke" if model == "SmokeSensor-EM" else
+                            None,
+                        data=device_status["data"],
+                        manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
+                        model=model,
+                        sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
+                    )
+
+                    local_devices[device.unique_id] = device
+
+                    if send_callback:
+                        self._binary_sensor_devices[device.unique_id] = device
+                        await self._send_binary_sensor_update_callback(device_id=device.unique_id)
+                except BaseException as e:
+                    _LOGGER.error(f"Failed to poll device {unique_id}", exc_info=e)
 
             self._binary_sensor_devices = local_devices
             _LOGGER.debug("Refreshed %s binary sensor devices", len(self._binary_sensor_devices))
@@ -356,39 +403,47 @@ class IT600Gateway:
             )
 
             for device_status in status["id"]:
-                th = device_status.get("sIT600TH", None)
+                unique_id = device_status.get("data", {}).get("UniID", None)
 
-                if th is None:
+                if unique_id is None:
                     continue
 
-                device = ClimateDevice(
-                    available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
-                    name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
-                    unique_id=device_status["data"]["UniID"],
-                    temperature_unit=TEMP_CELSIUS,  # API always reports temperature as celsius
-                    precision=0.5,
-                    current_temperature=th["LocalTemperature_x100"] / 100,
-                    target_temperature=th["HeatingSetpoint_x100"] / 100,
-                    max_temp=th.get("MaxHeatSetpoint_x100", 3500) / 100,
-                    min_temp=th.get("MinHeatSetpoint_x100", 500) / 100,
-                    hvac_mode=HVAC_MODE_OFF if th["HoldType"] == 7 else HVAC_MODE_HEAT,
-                    hvac_action=CURRENT_HVAC_OFF if th["HoldType"] == 7 else CURRENT_HVAC_IDLE if th["RunningState"] % 2 == 0 else CURRENT_HVAC_HEAT,  # RunningState 0 or 128 => idle, 1 or 129 => heating
-                    hvac_modes=[HVAC_MODE_OFF, HVAC_MODE_HEAT],
-                    preset_mode=PRESET_OFF if th["HoldType"] == 7 else PRESET_PERMANENT_HOLD if th["HoldType"] == 2 else PRESET_FOLLOW_SCHEDULE,
-                    preset_modes=[PRESET_FOLLOW_SCHEDULE, PRESET_PERMANENT_HOLD, PRESET_OFF],
-                    supported_features=SUPPORT_TARGET_TEMPERATURE | SUPPORT_PRESET_MODE,
-                    device_class="temperature",
-                    data=device_status["data"],
-                    manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
-                    model=device_status.get("DeviceL", {}).get("ModelIdentifier_i", None),
-                    sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
-                )
+                try:
+                    th = device_status.get("sIT600TH", None)
 
-                local_devices[device.unique_id] = device
+                    if th is None:
+                        continue
 
-                if send_callback:
-                    self._climate_devices[device.unique_id] = device
-                    await self._send_climate_update_callback(device_id=device.unique_id)
+                    device = ClimateDevice(
+                        available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
+                        name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
+                        unique_id=device_status["data"]["UniID"],
+                        temperature_unit=TEMP_CELSIUS,  # API always reports temperature as celsius
+                        precision=0.5,
+                        current_temperature=th["LocalTemperature_x100"] / 100,
+                        target_temperature=th["HeatingSetpoint_x100"] / 100,
+                        max_temp=th.get("MaxHeatSetpoint_x100", 3500) / 100,
+                        min_temp=th.get("MinHeatSetpoint_x100", 500) / 100,
+                        hvac_mode=HVAC_MODE_OFF if th["HoldType"] == 7 else HVAC_MODE_HEAT,
+                        hvac_action=CURRENT_HVAC_OFF if th["HoldType"] == 7 else CURRENT_HVAC_IDLE if th["RunningState"] % 2 == 0 else CURRENT_HVAC_HEAT,  # RunningState 0 or 128 => idle, 1 or 129 => heating
+                        hvac_modes=[HVAC_MODE_OFF, HVAC_MODE_HEAT],
+                        preset_mode=PRESET_OFF if th["HoldType"] == 7 else PRESET_PERMANENT_HOLD if th["HoldType"] == 2 else PRESET_FOLLOW_SCHEDULE,
+                        preset_modes=[PRESET_FOLLOW_SCHEDULE, PRESET_PERMANENT_HOLD, PRESET_OFF],
+                        supported_features=SUPPORT_TARGET_TEMPERATURE | SUPPORT_PRESET_MODE,
+                        device_class="temperature",
+                        data=device_status["data"],
+                        manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
+                        model=device_status.get("DeviceL", {}).get("ModelIdentifier_i", None),
+                        sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
+                    )
+
+                    local_devices[device.unique_id] = device
+
+                    if send_callback:
+                        self._climate_devices[device.unique_id] = device
+                        await self._send_climate_update_callback(device_id=device.unique_id)
+                except BaseException as e:
+                    _LOGGER.error(f"Failed to poll device {unique_id}", exc_info=e)
 
         self._climate_devices = local_devices
         _LOGGER.debug("Refreshed %s climate devices", len(self._climate_devices))
