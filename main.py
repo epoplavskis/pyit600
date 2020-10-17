@@ -5,7 +5,7 @@ import logging
 import sys
 
 from pyit600.exceptions import IT600AuthenticationError, IT600ConnectionError
-from pyit600.gateway import IT600Gateway
+from pyit600.gateway_singleton import IT600GatewaySingleton
 
 
 def help():
@@ -67,7 +67,7 @@ async def main():
         help()
         sys.exit(0)
 
-    async with IT600Gateway(host=args.host, euid=args.euid, debug=args.debug) as gateway:
+    async with IT600GatewaySingleton.get_instance(host=args.host, euid=args.euid, debug=args.debug) as gateway:
         try:
             await gateway.connect()
         except IT600ConnectionError:
