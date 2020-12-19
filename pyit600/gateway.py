@@ -31,7 +31,7 @@ from .exceptions import (
     IT600CommandError,
     IT600ConnectionError,
 )
-from .models import ClimateDevice, BinarySensorDevice, SwitchDevice, CoverDevice, SensorDevice
+from .models import GatewayDevice, ClimateDevice, BinarySensorDevice, SwitchDevice, CoverDevice, SensorDevice
 
 _LOGGER = logging.getLogger("pyit600")
 
@@ -55,6 +55,8 @@ class IT600Gateway:
         """Initialize connection with the iT600 gateway."""
         self._session = session
         self._close_session = False
+
+        self._gateway_device: Optional[GatewayDevice] = None
 
         self._climate_devices: Dict[str, ClimateDevice] = {}
         self._climate_update_callbacks: List[Callable[[Any], Awaitable[None]]] = []
@@ -127,6 +129,15 @@ class IT600Gateway:
         )
 
         try:
+            gateway_devices = list(
+                filter(lambda x: "sGateway" in x, all_devices["id"])
+            )
+
+            await self._refresh_gateway_device(gateway_devices, send_callback)
+        except BaseException as e:
+            _LOGGER.error("Failed to poll gateway device", exc_info=e)
+
+        try:
             climate_devices = list(
                 filter(lambda x: "sIT600TH" in x, all_devices["id"])
             )
@@ -170,6 +181,41 @@ class IT600Gateway:
             await self._refresh_cover_devices(covers, send_callback)
         except BaseException as e:
             _LOGGER.error("Failed to poll covers", exc_info=e)
+
+    async def _refresh_gateway_device(self, devices: List[Any], send_callback=False):
+        local_device: Optional[GatewayDevice] = None
+
+        if devices:
+            status = await self._make_encrypted_request(
+                "read",
+                {
+                    "requestAttr": "deviceid",
+                    "id": [{"data": device["data"]} for device in devices]
+                }
+            )
+
+            for device_status in status["id"]:
+                unique_id = device_status.get("sGateway", {}).get("NetworkLANMAC", None)
+
+                if unique_id is None:
+                    continue
+
+                model: Optional[str] = device_status.get("sGateway", {}).get("ModelIdentifier", None)
+
+                try:
+                    local_device = GatewayDevice(
+                        name=model,
+                        unique_id=unique_id,
+                        data=device_status["data"],
+                        manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
+                        model=model,
+                        sw_version=device_status.get("sOTA", {}).get("OTAFirmwareVersion_d", None)
+                    )
+                except BaseException as e:
+                    _LOGGER.error(f"Failed to poll gateway {unique_id}", exc_info=e)
+
+            self._gateway_device = local_device
+            _LOGGER.debug("Refreshed gateway device")
 
     async def _refresh_cover_devices(self, devices: List[Any], send_callback=False):
         local_devices = {}
@@ -497,6 +543,11 @@ class IT600Gateway:
                 await update_callback(device_id=device_id)
         else:
             _LOGGER.error("Callback for sensor updates has not been set")
+
+    def get_gateway_device(self) -> Optional[GatewayDevice]:
+        """Public method to return gateway device."""
+
+        return self._gateway_device
 
     def get_climate_devices(self) -> Dict[str, ClimateDevice]:
         """Public method to return the state of all Salus IT600 climate devices."""

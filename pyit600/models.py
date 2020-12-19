@@ -3,6 +3,15 @@
 from typing import List, NamedTuple, Optional, Any
 
 
+class GatewayDevice(NamedTuple):
+    name: str
+    unique_id: str
+    data: dict
+    manufacturer: str
+    model: Optional[str]
+    sw_version: Optional[str]
+
+
 class ClimateDevice(NamedTuple):
     available: bool
     name: str
