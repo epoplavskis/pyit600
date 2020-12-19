@@ -364,6 +364,9 @@ class IT600Gateway:
 
                     model: Optional[str] = device_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
 
+                    if model == "SB600":
+                        continue  # Skip button
+
                     device = BinarySensorDevice(
                         available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
                         name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
