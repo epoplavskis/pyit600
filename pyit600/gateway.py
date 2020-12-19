@@ -20,6 +20,8 @@ from .const import (
     SUPPORT_PRESET_MODE,
     SUPPORT_TARGET_TEMPERATURE,
     TEMP_CELSIUS,
+    SUPPORT_OPEN,
+    SUPPORT_CLOSE,
     SUPPORT_SET_POSITION, STATE_UNKNOWN
 )
 from .encryptor import IT600Encryptor
@@ -209,7 +211,7 @@ class IT600Gateway:
                         is_opening=None if set_position is None else current_position < set_position,
                         is_closing=None if set_position is None else current_position > set_position,
                         is_closed=True if current_position == 0 else False,
-                        supported_features=SUPPORT_SET_POSITION,
+                        supported_features=SUPPORT_OPEN | SUPPORT_CLOSE | SUPPORT_SET_POSITION,
                         device_class=None,
                         data=device_status["data"],
                         manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
@@ -427,7 +429,7 @@ class IT600Gateway:
                         target_temperature=th["HeatingSetpoint_x100"] / 100,
                         max_temp=th.get("MaxHeatSetpoint_x100", 3500) / 100,
                         min_temp=th.get("MinHeatSetpoint_x100", 500) / 100,
-                        hvac_mode=HVAC_MODE_OFF if th["HoldType"] == 7 else HVAC_MODE_HEAT,
+                        hvac_mode=HVAC_MODE_OFF if th["HoldType"] == 7 else HVAC_MODE_HEAT if th["HoldType"] == 2 else HVAC_MODE_AUTO,
                         hvac_action=CURRENT_HVAC_OFF if th["HoldType"] == 7 else CURRENT_HVAC_IDLE if th["RunningState"] % 2 == 0 else CURRENT_HVAC_HEAT,  # RunningState 0 or 128 => idle, 1 or 129 => heating
                         hvac_modes=[HVAC_MODE_OFF, HVAC_MODE_HEAT],
                         preset_mode=PRESET_OFF if th["HoldType"] == 7 else PRESET_PERMANENT_HOLD if th["HoldType"] == 2 else PRESET_FOLLOW_SCHEDULE,
@@ -567,6 +569,54 @@ class IT600Gateway:
                         "data": device.data,
                         "sLevelS": {
                             "SetMoveToLevel": f"{format(position, '02x')}FFFF"
+                        },
+                    }
+                ],
+            },
+        )
+
+    async def open_cover(self, device_id: str) -> None:
+        """Public method to open the specified cover device."""
+
+        device = self.get_cover_device(device_id)
+
+        if device is None:
+            _LOGGER.error("Cannot turn on: cover device not found with the specified id: %s", device_id)
+            return
+
+        await self._make_encrypted_request(
+            "write",
+            {
+                "requestAttr": "write",
+                "id": [
+                    {
+                        "data": device.data,
+                        "sLevelS": {
+                            "SetMoveToLevel": f"{format(100, '02x')}FFFF"
+                        },
+                    }
+                ],
+            },
+        )
+
+    async def close_cover(self, device_id: str) -> None:
+        """Public method to close the specified cover device."""
+
+        device = self.get_cover_device(device_id)
+
+        if device is None:
+            _LOGGER.error("Cannot turn on: cover device not found with the specified id: %s", device_id)
+            return
+
+        await self._make_encrypted_request(
+            "write",
+            {
+                "requestAttr": "write",
+                "id": [
+                    {
+                        "data": device.data,
+                        "sLevelS": {
+                            "SetMoveToLevel": f"{format(0, '02x')}FFFF"
                         },
                     }
                 ],

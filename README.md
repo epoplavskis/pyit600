@@ -52,6 +52,8 @@ async with IT600Gateway(host=args.host, euid=args.euid) as gateway:
  - get_cover_devices()
  - get_cover_device(device_id)
  - set_cover_position(device_id, position)
+ - open_cover(device_id)
+ - close_cover(device_id)
  - get_sensor_devices()
  - get_sensor_device(device_id)
 
