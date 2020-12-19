@@ -311,12 +311,14 @@ class IT600Gateway:
                     if temperature is None:
                         continue
 
+                    unique_id = unique_id + "_temp"  # Some sensors also measure temperature besides their primary function (eg. SW600)
+
                     model: Optional[str] = device_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
 
                     device = SensorDevice(
                         available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
                         name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
-                        unique_id=device_status["data"]["UniID"],
+                        unique_id=unique_id,
                         state=(temperature / 100),
                         unit_of_measurement=TEMP_CELSIUS,
                         device_class="temperature",
@@ -356,9 +358,6 @@ class IT600Gateway:
                     continue
 
                 try:
-                    if device_status.get("sTempS", None) is not None:
-                        continue  # Skip temperature sensors (eg. PS600 pipe sensor)
-
                     is_on: Optional[bool] = device_status.get("sIASZS", {}).get("ErrorIASZSAlarmed1", None)
 
                     if is_on is None:
@@ -422,7 +421,7 @@ class IT600Gateway:
                     device = ClimateDevice(
                         available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
                         name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
-                        unique_id=device_status["data"]["UniID"],
+                        unique_id=unique_id,
                         temperature_unit=TEMP_CELSIUS,  # API always reports temperature as celsius
                         precision=0.5,
                         current_temperature=th["LocalTemperature_x100"] / 100,
