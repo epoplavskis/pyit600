@@ -18,6 +18,7 @@ class ClimateDevice(NamedTuple):
     unique_id: str
     temperature_unit: str
     precision: float
+    humidity: int
     current_temperature: float
     target_temperature: float
     max_temp: float
