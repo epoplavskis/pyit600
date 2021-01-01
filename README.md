@@ -92,6 +92,17 @@ These switch devices have not been tested, but may work:
 These cover devices have been tested:
 * RS600
 
+### Troubleshooting
+
+Check if you have "Local Wifi Mode" enabled:
+* Open Smart Home app on your phone
+* Sign in
+* Double tap your Gateway to open info screen
+* Press gear icon to enter configuration
+* Scroll down a bit and check if "Disable Local WiFi Mode" is set to "No"
+* Restart Gateway after changing the setting
+
+
 ### Contributing
 
 If you want to help to get your device supported, open GitHub issue and add your device model number and output of `main.py` program. Be sure to run this program with --debug option.
