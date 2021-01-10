@@ -52,7 +52,7 @@ class IT600Gateway:
         self._port = port
         self._request_timeout = request_timeout
         self._debug = debug
-        self._lock = threading.RLock()  # Gateway supports very few concurrent requests
+        self._lock = asyncio.Lock()  # Gateway supports very few concurrent requests
 
         """Initialize connection with the iT600 gateway."""
         self._session = session
@@ -123,67 +123,66 @@ class IT600Gateway:
     async def poll_status(self, send_callback=False) -> None:
         """Public method for polling the state of Salus iT600 devices."""
 
-        with self._lock:
-            all_devices = await self._make_encrypted_request(
-                "read",
-                {
-                    "requestAttr": "readall"
-                }
+        all_devices = await self._make_encrypted_request(
+            "read",
+            {
+                "requestAttr": "readall"
+            }
+        )
+
+        try:
+            gateway_devices = list(
+                filter(lambda x: "sGateway" in x, all_devices["id"])
             )
 
-            try:
-                gateway_devices = list(
-                    filter(lambda x: "sGateway" in x, all_devices["id"])
-                )
+            await self._refresh_gateway_device(gateway_devices, send_callback)
+        except BaseException as e:
+            _LOGGER.error("Failed to poll gateway device", exc_info=e)
 
-                await self._refresh_gateway_device(gateway_devices, send_callback)
-            except BaseException as e:
-                _LOGGER.error("Failed to poll gateway device", exc_info=e)
+        try:
+            climate_devices = list(
+                filter(lambda x: "sIT600TH" in x, all_devices["id"])
+            )
 
-            try:
-                climate_devices = list(
-                    filter(lambda x: "sIT600TH" in x, all_devices["id"])
-                )
+            await self._refresh_climate_devices(climate_devices, send_callback)
+        except BaseException as e:
+            _LOGGER.error("Failed to poll climate devices", exc_info=e)
 
-                await self._refresh_climate_devices(climate_devices, send_callback)
-            except BaseException as e:
-                _LOGGER.error("Failed to poll climate devices", exc_info=e)
+        try:
+            binary_sensors = list(
+                filter(lambda x: "sIASZS" in x, all_devices["id"])
+            )
 
-            try:
-                binary_sensors = list(
-                    filter(lambda x: "sIASZS" in x, all_devices["id"])
-                )
+            await self._refresh_binary_sensor_devices(binary_sensors, send_callback)
+        except BaseException as e:
+            _LOGGER.error("Failed to poll binary sensors", exc_info=e)
 
-                await self._refresh_binary_sensor_devices(binary_sensors, send_callback)
-            except BaseException as e:
-                _LOGGER.error("Failed to poll binary sensors", exc_info=e)
+        try:
+            sensors = list(
+                filter(lambda x: "sTempS" in x, all_devices["id"])
+            )
 
-            try:
-                sensors = list(
-                    filter(lambda x: "sTempS" in x, all_devices["id"])
-                )
+            await self._refresh_sensor_devices(sensors, send_callback)
+        except BaseException as e:
+            _LOGGER.error("Failed to poll sensors", exc_info=e)
 
-                await self._refresh_sensor_devices(sensors, send_callback)
-            except BaseException as e:
-                _LOGGER.error("Failed to poll sensors", exc_info=e)
+        try:
+            switches = list(
+                filter(lambda x: "sOnOffS" in x, all_devices["id"])
+            )
 
-            try:
-                switches = list(
-                    filter(lambda x: "sOnOffS" in x, all_devices["id"])
-                )
+            await self._refresh_switch_devices(switches, send_callback)
+        except BaseException as e:
+            _LOGGER.error("Failed to poll switches", exc_info=e)
 
-                await self._refresh_switch_devices(switches, send_callback)
-            except BaseException as e:
-                _LOGGER.error("Failed to poll switches", exc_info=e)
+        try:
+            covers = list(
+                filter(lambda x: "sLevelS" in x, all_devices["id"])
+            )
 
-            try:
-                covers = list(
-                    filter(lambda x: "sLevelS" in x, all_devices["id"])
-                )
-
-                await self._refresh_cover_devices(covers, send_callback)
-            except BaseException as e:
-                _LOGGER.error("Failed to poll covers", exc_info=e)
+            await self._refresh_cover_devices(covers, send_callback)
+        except BaseException as e:
+            _LOGGER.error("Failed to poll covers", exc_info=e)
 
     async def _refresh_gateway_device(self, devices: List[Any], send_callback=False):
         local_device: Optional[GatewayDevice] = None
@@ -828,7 +827,7 @@ class IT600Gateway:
     async def _make_encrypted_request(self, command: str, request_body: dict) -> Any:
         """Makes encrypted Salus iT600 json request, decrypts and returns response."""
 
-        with self._lock:
+        async with self._lock:
             if self._session is None:
                 self._session = aiohttp.ClientSession()
                 self._close_session = True
