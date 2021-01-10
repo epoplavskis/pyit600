@@ -473,7 +473,7 @@ class IT600Gateway:
                         name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
                         unique_id=unique_id,
                         temperature_unit=TEMP_CELSIUS,  # API always reports temperature as celsius
-                        precision=0.5,
+                        precision=0.1,
                         humidity=th.get("SunnySetpoint_x100", None),
                         current_temperature=th["LocalTemperature_x100"] / 100,
                         target_temperature=th["HeatingSetpoint_x100"] / 100,
