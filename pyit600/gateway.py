@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Callable, Awaitable
 
 import aiohttp
 import async_timeout
+import threading
 
 from .const import (
     CURRENT_HVAC_HEAT,
@@ -23,7 +24,7 @@ from .const import (
     TEMP_CELSIUS,
     SUPPORT_OPEN,
     SUPPORT_CLOSE,
-    SUPPORT_SET_POSITION, STATE_UNKNOWN
+    SUPPORT_SET_POSITION
 )
 from .encryptor import IT600Encryptor
 from .exceptions import (
@@ -51,6 +52,7 @@ class IT600Gateway:
         self._port = port
         self._request_timeout = request_timeout
         self._debug = debug
+        self._lock = threading.RLock()  # Gateway supports very few concurrent requests
 
         """Initialize connection with the iT600 gateway."""
         self._session = session
@@ -121,66 +123,67 @@ class IT600Gateway:
     async def poll_status(self, send_callback=False) -> None:
         """Public method for polling the state of Salus iT600 devices."""
 
-        all_devices = await self._make_encrypted_request(
-            "read",
-            {
-                "requestAttr": "readall"
-            }
-        )
-
-        try:
-            gateway_devices = list(
-                filter(lambda x: "sGateway" in x, all_devices["id"])
+        with self._lock:
+            all_devices = await self._make_encrypted_request(
+                "read",
+                {
+                    "requestAttr": "readall"
+                }
             )
 
-            await self._refresh_gateway_device(gateway_devices, send_callback)
-        except BaseException as e:
-            _LOGGER.error("Failed to poll gateway device", exc_info=e)
+            try:
+                gateway_devices = list(
+                    filter(lambda x: "sGateway" in x, all_devices["id"])
+                )
 
-        try:
-            climate_devices = list(
-                filter(lambda x: "sIT600TH" in x, all_devices["id"])
-            )
+                await self._refresh_gateway_device(gateway_devices, send_callback)
+            except BaseException as e:
+                _LOGGER.error("Failed to poll gateway device", exc_info=e)
 
-            await self._refresh_climate_devices(climate_devices, send_callback)
-        except BaseException as e:
-            _LOGGER.error("Failed to poll climate devices", exc_info=e)
+            try:
+                climate_devices = list(
+                    filter(lambda x: "sIT600TH" in x, all_devices["id"])
+                )
 
-        try:
-            binary_sensors = list(
-                filter(lambda x: "sIASZS" in x, all_devices["id"])
-            )
+                await self._refresh_climate_devices(climate_devices, send_callback)
+            except BaseException as e:
+                _LOGGER.error("Failed to poll climate devices", exc_info=e)
 
-            await self._refresh_binary_sensor_devices(binary_sensors, send_callback)
-        except BaseException as e:
-            _LOGGER.error("Failed to poll binary sensors", exc_info=e)
+            try:
+                binary_sensors = list(
+                    filter(lambda x: "sIASZS" in x, all_devices["id"])
+                )
 
-        try:
-            sensors = list(
-                filter(lambda x: "sTempS" in x, all_devices["id"])
-            )
+                await self._refresh_binary_sensor_devices(binary_sensors, send_callback)
+            except BaseException as e:
+                _LOGGER.error("Failed to poll binary sensors", exc_info=e)
 
-            await self._refresh_sensor_devices(sensors, send_callback)
-        except BaseException as e:
-            _LOGGER.error("Failed to poll sensors", exc_info=e)
+            try:
+                sensors = list(
+                    filter(lambda x: "sTempS" in x, all_devices["id"])
+                )
 
-        try:
-            switches = list(
-                filter(lambda x: "sOnOffS" in x, all_devices["id"])
-            )
+                await self._refresh_sensor_devices(sensors, send_callback)
+            except BaseException as e:
+                _LOGGER.error("Failed to poll sensors", exc_info=e)
 
-            await self._refresh_switch_devices(switches, send_callback)
-        except BaseException as e:
-            _LOGGER.error("Failed to poll switches", exc_info=e)
+            try:
+                switches = list(
+                    filter(lambda x: "sOnOffS" in x, all_devices["id"])
+                )
 
-        try:
-            covers = list(
-                filter(lambda x: "sLevelS" in x, all_devices["id"])
-            )
+                await self._refresh_switch_devices(switches, send_callback)
+            except BaseException as e:
+                _LOGGER.error("Failed to poll switches", exc_info=e)
 
-            await self._refresh_cover_devices(covers, send_callback)
-        except BaseException as e:
-            _LOGGER.error("Failed to poll covers", exc_info=e)
+            try:
+                covers = list(
+                    filter(lambda x: "sLevelS" in x, all_devices["id"])
+                )
+
+                await self._refresh_cover_devices(covers, send_callback)
+            except BaseException as e:
+                _LOGGER.error("Failed to poll covers", exc_info=e)
 
     async def _refresh_gateway_device(self, devices: List[Any], send_callback=False):
         local_device: Optional[GatewayDevice] = None
@@ -825,50 +828,51 @@ class IT600Gateway:
     async def _make_encrypted_request(self, command: str, request_body: dict) -> Any:
         """Makes encrypted Salus iT600 json request, decrypts and returns response."""
 
-        if self._session is None:
-            self._session = aiohttp.ClientSession()
-            self._close_session = True
+        with self._lock:
+            if self._session is None:
+                self._session = aiohttp.ClientSession()
+                self._close_session = True
 
-        try:
-            request_url = f"http://{self._host}:{self._port}/deviceid/{command}"
-            request_body_json = json.dumps(request_body)
-
-            if self._debug:
-                _LOGGER.debug("Gateway request: POST %s\n%s\n", request_url, request_body_json)
-
-            with async_timeout.timeout(self._request_timeout):
-                resp = await self._session.post(
-                    request_url,
-                    data=self._encryptor.encrypt(request_body_json),
-                    headers={"content-type": "application/json"},
-                )
-                response_bytes = await resp.read()
-                response_json_string = self._encryptor.decrypt(response_bytes)
+            try:
+                request_url = f"http://{self._host}:{self._port}/deviceid/{command}"
+                request_body_json = json.dumps(request_body)
 
                 if self._debug:
-                    _LOGGER.debug("Gateway response:\n%s\n", response_json_string)
+                    _LOGGER.debug("Gateway request: POST %s\n%s\n", request_url, request_body_json)
 
-                response_json = json.loads(response_json_string)
-
-                if not response_json["status"] == "success":
-                    repr_request_body = repr(request_body)
-
-                    _LOGGER.error("%s failed: %s", command, repr_request_body)
-                    raise IT600CommandError(
-                        f"iT600 gateway rejected '{command}' command with content '{repr_request_body}'"
+                with async_timeout.timeout(self._request_timeout):
+                    resp = await self._session.post(
+                        request_url,
+                        data=self._encryptor.encrypt(request_body_json),
+                        headers={"content-type": "application/json"},
                     )
+                    response_bytes = await resp.read()
+                    response_json_string = self._encryptor.decrypt(response_bytes)
 
-                return response_json
-        except asyncio.TimeoutError as e:
-            _LOGGER.error("Timeout while connecting to gateway: %s", e)
-            raise IT600ConnectionError(
-                "Error occurred while communicating with iT600 gateway: timeout"
-            ) from e
-        except Exception as e:
-            _LOGGER.error("Exception. %s / %s", type(e), repr(e.args), e)
-            raise IT600CommandError(
-                "Unknown error occurred while communicating with iT600 gateway"
-            ) from e
+                    if self._debug:
+                        _LOGGER.debug("Gateway response:\n%s\n", response_json_string)
+
+                    response_json = json.loads(response_json_string)
+
+                    if not response_json["status"] == "success":
+                        repr_request_body = repr(request_body)
+
+                        _LOGGER.error("%s failed: %s", command, repr_request_body)
+                        raise IT600CommandError(
+                            f"iT600 gateway rejected '{command}' command with content '{repr_request_body}'"
+                        )
+
+                    return response_json
+            except asyncio.TimeoutError as e:
+                _LOGGER.error("Timeout while connecting to gateway: %s", e)
+                raise IT600ConnectionError(
+                    "Error occurred while communicating with iT600 gateway: timeout"
+                ) from e
+            except Exception as e:
+                _LOGGER.error("Exception. %s / %s", type(e), repr(e.args), e)
+                raise IT600CommandError(
+                    "Unknown error occurred while communicating with iT600 gateway"
+                ) from e
 
     async def close(self) -> None:
         """Close open client session."""
