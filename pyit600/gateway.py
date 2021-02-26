@@ -467,13 +467,20 @@ class IT600Gateway:
                     if th is None:
                         continue
 
+                    model: Optional[str] = device_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
+
+                    current_humidity: Optional[float] = None
+
+                    if model == "SQ610" or model == "SQ610RF":
+                        current_humidity = th.get("SunnySetpoint_x100", None)
+
                     device = ClimateDevice(
                         available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
                         name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
                         unique_id=unique_id,
                         temperature_unit=TEMP_CELSIUS,  # API always reports temperature as celsius
                         precision=0.1,
-                        humidity=th.get("SunnySetpoint_x100", None),
+                        current_humidity=current_humidity,
                         current_temperature=th["LocalTemperature_x100"] / 100,
                         target_temperature=th["HeatingSetpoint_x100"] / 100,
                         max_temp=th.get("MaxHeatSetpoint_x100", 3500) / 100,

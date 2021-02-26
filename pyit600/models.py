@@ -22,7 +22,7 @@ class ClimateDevice(NamedTuple):
     target_temperature: float
     max_temp: float
     min_temp: float
-    humidity: int
+    current_humidity: Optional[float]
     hvac_mode: str
     hvac_action: str
     hvac_modes: List[str]
