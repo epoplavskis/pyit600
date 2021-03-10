@@ -7,7 +7,8 @@ from typing import Any, Dict, List, Optional, Callable, Awaitable
 
 import aiohttp
 import async_timeout
-import threading
+
+from aiohttp import client_exceptions
 
 from .const import (
     CURRENT_HVAC_HEAT,
@@ -873,6 +874,11 @@ class IT600Gateway:
                 _LOGGER.error("Timeout while connecting to gateway: %s", e)
                 raise IT600ConnectionError(
                     "Error occurred while communicating with iT600 gateway: timeout"
+                ) from e
+            except client_exceptions.ClientConnectorError as e:
+                raise IT600ConnectionError(
+                    "Error occurred while communicating with iT600 gateway: "
+                    "check if you have specified host/IP address correctly"
                 ) from e
             except Exception as e:
                 _LOGGER.error("Exception. %s / %s", type(e), repr(e.args), e)
