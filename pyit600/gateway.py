@@ -619,7 +619,7 @@ class IT600Gateway:
         device = self.get_cover_device(device_id)
 
         if device is None:
-            _LOGGER.error("Cannot turn on: cover device not found with the specified id: %s", device_id)
+            _LOGGER.error("Cannot set cover position: cover device not found with the specified id: %s", device_id)
             return
 
         await self._make_encrypted_request(
@@ -640,50 +640,12 @@ class IT600Gateway:
     async def open_cover(self, device_id: str) -> None:
         """Public method to open the specified cover device."""
 
-        device = self.get_cover_device(device_id)
-
-        if device is None:
-            _LOGGER.error("Cannot turn on: cover device not found with the specified id: %s", device_id)
-            return
-
-        await self._make_encrypted_request(
-            "write",
-            {
-                "requestAttr": "write",
-                "id": [
-                    {
-                        "data": device.data,
-                        "sLevelS": {
-                            "SetMoveToLevel": f"{format(100, '02x')}FFFF"
-                        },
-                    }
-                ],
-            },
-        )
+        await self.set_cover_position(device_id, 100)
 
     async def close_cover(self, device_id: str) -> None:
         """Public method to close the specified cover device."""
 
-        device = self.get_cover_device(device_id)
-
-        if device is None:
-            _LOGGER.error("Cannot turn on: cover device not found with the specified id: %s", device_id)
-            return
-
-        await self._make_encrypted_request(
-            "write",
-            {
-                "requestAttr": "write",
-                "id": [
-                    {
-                        "data": device.data,
-                        "sLevelS": {
-                            "SetMoveToLevel": f"{format(0, '02x')}FFFF"
-                        },
-                    }
-                ],
-            },
-        )
+        await self.set_cover_position(device_id, 0)
 
     async def turn_on_switch_device(self, device_id: str) -> None:
         """Public method to turn on the specified switch device."""
