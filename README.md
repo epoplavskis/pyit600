@@ -70,12 +70,15 @@ These thermostats have been tested:
 * VS20WRF/VS20BRF
 * SQ610RF
 
+These thermostats devices have not been tested, but may work:
+* SQ610
+
 These binary sensors have been tested:
 * SW600
-
-These binary sensors have not been tested, but may work:
 * WLS600
 * OS600
+
+These binary sensors have not been tested, but may work:
 * SD600
 
 These temperature sensors have been tested:
