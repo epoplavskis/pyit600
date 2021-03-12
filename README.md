@@ -70,16 +70,10 @@ These thermostats have been tested:
 * VS20WRF/VS20BRF
 * SQ610RF
 
-These thermostats devices have not been tested, but may work:
-* SQ610
-
 These binary sensors have been tested:
 * SW600
 * WLS600
 * OS600
-
-These binary sensors have not been tested, but may work:
-* SD600
 
 These temperature sensors have been tested:
 * PS600
@@ -88,12 +82,29 @@ These switch devices have been tested:
 * SPE600
 * RS600
 
-These switch devices have not been tested, but may work:
-* SR600
-* SP600
-
 These cover devices have been tested:
 * RS600
+
+### Unsupported devices
+
+Buttons perform actions only in Salus Smart Home app:
+* SB600
+* CSB600
+
+These binary sensors do not work yet:
+* SD600
+
+These switch devices do not work yet:
+* SR600
+
+### Untested devices
+
+These thermostats devices have not been tested, but may work:
+* SQ610
+* FC600
+
+These switch devices have not been tested, but may work:
+* SP600
 
 ### Troubleshooting
 
