@@ -63,26 +63,26 @@ async with IT600Gateway(host=args.host, euid=args.euid) as gateway:
 
 ### Supported devices
 
-These thermostats have been tested:
+Thermostats:
 * HTRP-RF(50)
 * TS600
 * VS10WRF/VS10BRF
 * VS20WRF/VS20BRF
 * SQ610RF
 
-These binary sensors have been tested:
+Binary sensors:
 * SW600
 * WLS600
 * OS600
 
-These temperature sensors have been tested:
+Temperature sensors:
 * PS600
 
-These switch devices have been tested:
+Switch devices:
 * SPE600
 * RS600
 
-These cover devices have been tested:
+Cover devices:
 * RS600
 
 ### Unsupported devices
