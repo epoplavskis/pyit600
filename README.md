@@ -106,6 +106,9 @@ These thermostats devices have not been tested, but may work:
 These switch devices have not been tested, but may work:
 * SP600
 
+These binary sensors have not been tested, but may work:
+* MS600
+
 ### Troubleshooting
 
 Check if you have "Local Wifi Mode" enabled:
