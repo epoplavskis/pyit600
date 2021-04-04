@@ -81,6 +81,8 @@ Temperature sensors:
 Switch devices:
 * SPE600
 * RS600
+* SR600
+* SD600 (sometimes gateway may not expose required information for these devices to be detected, reason is unknown)
 
 Cover devices:
 * RS600
@@ -90,12 +92,6 @@ Cover devices:
 Buttons perform actions only in Salus Smart Home app:
 * SB600
 * CSB600
-
-These binary sensors do not work yet:
-* SD600
-
-These switch devices do not work yet:
-* SR600
 
 ### Untested devices
 
