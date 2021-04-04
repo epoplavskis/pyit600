@@ -304,9 +304,6 @@ class IT600Gateway:
                     if device_status.get("sLevelS", None) is not None:
                         continue  # Skip roller shutter endpoint in combined roller shutter/relay device
 
-                    if device_status.get("sButtonS", {}).get("Mode", None) == 0:
-                        continue  # Skip endpoints which are disabled
-
                     is_on: Optional[bool] = device_status.get("sOnOffS", {}).get("OnOff", None)
 
                     if is_on is None:
