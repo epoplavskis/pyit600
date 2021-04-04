@@ -74,6 +74,7 @@ Binary sensors:
 * SW600
 * WLS600
 * OS600
+* SD600 (sometimes gateway may not expose required information for these devices to be detected, reason is unknown)
 
 Temperature sensors:
 * PS600
@@ -82,7 +83,6 @@ Switch devices:
 * SPE600
 * RS600
 * SR600
-* SD600 (sometimes gateway may not expose required information for these devices to be detected, reason is unknown)
 
 Cover devices:
 * RS600
