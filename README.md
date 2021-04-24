@@ -38,29 +38,6 @@ async with IT600Gateway(host=args.host, euid=args.euid) as gateway:
 		await gateway.set_climate_device_temperature(climate_device_id, 21)
 ```
 
-### Useful gateway methods
-
- - poll_status()
- - get_climate_devices()
- - get_climate_device(device_id)
- - set_climate_device_preset(device_id, preset)
- - set_climate_device_mode(device_id, mode)
- - set_climate_device_temperature(device_id, setpoint_celsius)
- - get_binary_sensor_devices()
- - get_binary_sensor_device(device_id)
- - get_switch_devices()
- - get_switch_device(device_id)
- - turn_on_switch_device(device_id)
- - turn_off_switch_device(device_id)
- - get_cover_devices()
- - get_cover_device(device_id)
- - set_cover_position(device_id, position)
- - open_cover(device_id)
- - close_cover(device_id)
- - get_sensor_devices()
- - get_sensor_device(device_id)
- - get_gateway_device()
-
 ### Supported devices
 
 Thermostats:
