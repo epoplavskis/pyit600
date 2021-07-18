@@ -12,20 +12,29 @@ from aiohttp import client_exceptions
 
 from .const import (
     CURRENT_HVAC_HEAT,
+    CURRENT_HVAC_COOL,
     CURRENT_HVAC_IDLE,
     CURRENT_HVAC_OFF,
     HVAC_MODE_HEAT,
+    HVAC_MODE_COOL,
     HVAC_MODE_OFF,
     HVAC_MODE_AUTO,
     PRESET_FOLLOW_SCHEDULE,
     PRESET_OFF,
     PRESET_PERMANENT_HOLD,
+    PRESET_ECO,
+    SUPPORT_FAN_MODE,
     SUPPORT_PRESET_MODE,
     SUPPORT_TARGET_TEMPERATURE,
     TEMP_CELSIUS,
     SUPPORT_OPEN,
     SUPPORT_CLOSE,
-    SUPPORT_SET_POSITION
+    SUPPORT_SET_POSITION,
+    FAN_MODE_AUTO,
+    FAN_MODE_HIGH,
+    FAN_MODE_MEDIUM,
+    FAN_MODE_LOW,
+    FAN_MODE_OFF
 )
 from .encryptor import IT600Encryptor
 from .exceptions import (
@@ -142,7 +151,7 @@ class IT600Gateway:
 
         try:
             climate_devices = list(
-                filter(lambda x: "sIT600TH" in x, all_devices["id"])
+                filter(lambda x: ("sIT600TH" in x) or ("sTherS" in x), all_devices["id"])
             )
 
             await self._refresh_climate_devices(climate_devices, send_callback)
@@ -460,41 +469,73 @@ class IT600Gateway:
                     continue
 
                 try:
-                    th = device_status.get("sIT600TH", None)
-
-                    if th is None:
-                        continue
-
                     model: Optional[str] = device_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
 
-                    current_humidity: Optional[float] = None
+                    th = device_status.get("sIT600TH", None)
+                    ther = device_status.get("sTherS", None)
+                    scomm = device_status.get("sComm", None)
+                    sfans = device_status.get("sFanS", None)
 
-                    if model == "SQ610" or model == "SQ610RF":
-                        current_humidity = th.get("SunnySetpoint_x100", None)
+                    if th is not None:
+                        current_humidity: Optional[float] = None
 
-                    device = ClimateDevice(
-                        available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
-                        name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
-                        unique_id=unique_id,
-                        temperature_unit=TEMP_CELSIUS,  # API always reports temperature as celsius
-                        precision=0.1,
-                        current_humidity=current_humidity,
-                        current_temperature=th["LocalTemperature_x100"] / 100,
-                        target_temperature=th["HeatingSetpoint_x100"] / 100,
-                        max_temp=th.get("MaxHeatSetpoint_x100", 3500) / 100,
-                        min_temp=th.get("MinHeatSetpoint_x100", 500) / 100,
-                        hvac_mode=HVAC_MODE_OFF if th["HoldType"] == 7 else HVAC_MODE_HEAT if th["HoldType"] == 2 else HVAC_MODE_AUTO,
-                        hvac_action=CURRENT_HVAC_OFF if th["HoldType"] == 7 else CURRENT_HVAC_IDLE if th["RunningState"] % 2 == 0 else CURRENT_HVAC_HEAT,  # RunningState 0 or 128 => idle, 1 or 129 => heating
-                        hvac_modes=[HVAC_MODE_OFF, HVAC_MODE_HEAT, HVAC_MODE_AUTO],
-                        preset_mode=PRESET_OFF if th["HoldType"] == 7 else PRESET_PERMANENT_HOLD if th["HoldType"] == 2 else PRESET_FOLLOW_SCHEDULE,
-                        preset_modes=[PRESET_FOLLOW_SCHEDULE, PRESET_PERMANENT_HOLD, PRESET_OFF],
-                        supported_features=SUPPORT_TARGET_TEMPERATURE | SUPPORT_PRESET_MODE,
-                        device_class="temperature",
-                        data=device_status["data"],
-                        manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
-                        model=device_status.get("DeviceL", {}).get("ModelIdentifier_i", None),
-                        sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
-                    )
+                        if model == "SQ610" or model == "SQ610RF":
+                            current_humidity = th.get("SunnySetpoint_x100", None)  # Quantum thermostats store humidity there, other thermostats store there one of the setpoint temperatures
+
+                        device = ClimateDevice(
+                            available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
+                            name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
+                            unique_id=unique_id,
+                            temperature_unit=TEMP_CELSIUS,  # API always reports temperature as celsius
+                            precision=0.1,
+                            current_humidity=current_humidity,
+                            current_temperature=th["LocalTemperature_x100"] / 100,
+                            target_temperature=th["HeatingSetpoint_x100"] / 100,
+                            max_temp=th.get("MaxHeatSetpoint_x100", 3500) / 100,
+                            min_temp=th.get("MinHeatSetpoint_x100", 500) / 100,
+                            hvac_mode=HVAC_MODE_OFF if th["HoldType"] == 7 else HVAC_MODE_HEAT if th["HoldType"] == 2 else HVAC_MODE_AUTO,
+                            hvac_action=CURRENT_HVAC_OFF if th["HoldType"] == 7 else CURRENT_HVAC_IDLE if th["RunningState"] % 2 == 0 else CURRENT_HVAC_HEAT,  # RunningState 0 or 128 => idle, 1 or 129 => heating
+                            hvac_modes=[HVAC_MODE_OFF, HVAC_MODE_HEAT, HVAC_MODE_AUTO],
+                            preset_mode=PRESET_OFF if th["HoldType"] == 7 else PRESET_PERMANENT_HOLD if th["HoldType"] == 2 else PRESET_FOLLOW_SCHEDULE,
+                            preset_modes=[PRESET_FOLLOW_SCHEDULE, PRESET_PERMANENT_HOLD, PRESET_OFF],
+                            supported_features=SUPPORT_TARGET_TEMPERATURE | SUPPORT_PRESET_MODE,
+                            device_class="temperature",
+                            data=device_status["data"],
+                            manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
+                            model=device_status.get("DeviceL", {}).get("ModelIdentifier_i", None),
+                            sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
+                        )
+                    elif ther is not None and scomm is not None and sfans is not None:
+                        is_heating: bool = (ther["SystemMode"] == 4)
+                        fan_mode: int = sfans.get("FanMode", 5)
+
+                        device = ClimateDevice(
+                            available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
+                            name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
+                            unique_id=unique_id,
+                            temperature_unit=TEMP_CELSIUS,  # API always reports temperature as celsius
+                            precision=0.1,
+                            current_humidity=None,
+                            current_temperature=ther["LocalTemperature_x100"] / 100,
+                            target_temperature=(ther["HeatingSetpoint_x100"] / 100) if is_heating else (ther["CoolingSetpoint_x100"] / 100),
+                            max_temp=(ther.get("MaxHeatSetpoint_x100", 3500) / 100) if is_heating else (ther.get("MaxCoolSetpoint_x100", 3500) / 100),
+                            min_temp=(ther.get("MinHeatSetpoint_x100", 500) / 100) if is_heating else (ther.get("MinCoolSetpoint_x100", 500) / 100),
+                            hvac_mode=HVAC_MODE_OFF if scomm["HoldType"] == 7 else HVAC_MODE_HEAT if scomm["HoldType"] == 2 else HVAC_MODE_AUTO, #TODO cooling
+                            hvac_action=CURRENT_HVAC_OFF if scomm["HoldType"] == 7 else CURRENT_HVAC_IDLE if ther["RunningState"] % 2 == 0 else CURRENT_HVAC_HEAT if is_heating else CURRENT_HVAC_COOL,
+                            hvac_modes=[HVAC_MODE_OFF, HVAC_MODE_HEAT, HVAC_MODE_COOL, HVAC_MODE_AUTO],
+                            preset_mode=PRESET_OFF if scomm["HoldType"] == 7 else PRESET_ECO if scomm["HoldType"] == 10 else PRESET_PERMANENT_HOLD if scomm["HoldType"] == 2 else PRESET_FOLLOW_SCHEDULE,
+                            preset_modes=[PRESET_FOLLOW_SCHEDULE, PRESET_PERMANENT_HOLD, PRESET_ECO, PRESET_OFF],
+                            fan_mode=FAN_MODE_OFF if fan_mode == 0 else FAN_MODE_HIGH if fan_mode == 3 else FAN_MODE_MEDIUM if fan_mode == 2 else FAN_MODE_LOW if fan_mode == 1 else FAN_MODE_AUTO,  # fan_mode == 5 => FAN_MODE_AUTO
+                            fan_modes=[FAN_MODE_AUTO, FAN_MODE_HIGH, FAN_MODE_MEDIUM, FAN_MODE_LOW, FAN_MODE_OFF],
+                            supported_features=SUPPORT_TARGET_TEMPERATURE | SUPPORT_PRESET_MODE | SUPPORT_FAN_MODE,
+                            device_class="temperature",
+                            data=device_status["data"],
+                            manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
+                            model=device_status.get("DeviceL", {}).get("ModelIdentifier_i", None),
+                            sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
+                        )
+                    else:
+                        continue
 
                     local_devices[device.unique_id] = device
 
