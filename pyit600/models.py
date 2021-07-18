@@ -35,6 +35,32 @@ class ClimateDevice(NamedTuple):
     model: Optional[str]
     sw_version: Optional[str]
 
+class FanCoilDevice(NamedTuple):
+    available: bool
+    name: str
+    unique_id: str
+    temperature_unit: str
+    precision: float
+    current_temperature: float
+    target_cooling_temperature: float
+    target_heating_temperature: float
+    min_cooling_temp: float
+    min_heating_temp: float
+    max_cooling_temp: float
+    max_heating_temp: float
+    fan_speed: str
+    hvac_mode: str
+    hvac_action: str
+    hvac_modes: List[str]
+    preset_mode: str
+    preset_modes: List[str]
+    supported_features: int
+    locked: bool
+    device_class: str
+    data: dict
+    manufacturer: str
+    model: Optional[str]
+    sw_version: Optional[str]
 
 class BinarySensorDevice(NamedTuple):
     available: bool

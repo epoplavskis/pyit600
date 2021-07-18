@@ -24,6 +24,10 @@ async def my_climate_callback(device_id):
     print("Got callback for climate device id: " + device_id)
 
 
+async def my_fan_coil_callback(device_id):
+    print("Got callback for fan coil device id: " + device_id)
+
+
 async def my_sensor_callback(device_id):
     print("Got callback for sensor device id: " + device_id)
 
@@ -78,6 +82,7 @@ async def main():
             sys.exit(2)
 
         await gateway.add_climate_update_callback(my_climate_callback)
+        await gateway.add_fan_coil_update_callback(my_fan_coil_callback)
         await gateway.add_binary_sensor_update_callback(my_sensor_callback)
         await gateway.add_switch_update_callback(my_switch_callback)
         await gateway.add_cover_update_callback(my_cover_callback)
@@ -99,6 +104,22 @@ async def main():
 
                 print(f"Setting heating device {climate_device_id} temperature to 21 degrees celsius")
                 await gateway.set_climate_device_temperature(climate_device_id, 21)
+
+        fan_coil_devices = gateway.get_fan_coil_devices()
+
+        if not fan_coil_devices:
+            print(
+                """Warning: no fan coil devices found. Ensure that you have paired your thermostat(s) with gateway and you can see it in the official Salus app. If it works there, your thermostat might not be supported. If you want to help to get it supported, open GitHub issue and add your thermostat model number and output of this program. Be sure to run this program with --debug option.\n""")
+        else:
+            print("All fan coil devices:")
+            print(repr(fan_coil_devices))
+
+            for fan_coil_device_id in fan_coil_devices:
+                print(f"Fan coil device {fan_coil_device_id} status:")
+                print(repr(fan_coil_devices.get(fan_coil_device_id)))
+
+                print(f"Setting fan coil device {fan_coil_device_id} temperature to 32 degrees celsius")
+                await gateway.set_fan_coil_device_temperature(fan_coil_device_id, 32)
 
         binary_sensor_devices = gateway.get_binary_sensor_devices()
 

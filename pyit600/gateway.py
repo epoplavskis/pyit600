@@ -11,14 +11,25 @@ import async_timeout
 from aiohttp import client_exceptions
 
 from .const import (
+    CURRENT_HVAC_COOL,
+    CURRENT_HVAC_COOL_IDLE,
     CURRENT_HVAC_HEAT,
+    CURRENT_HVAC_HEAT_IDLE,
     CURRENT_HVAC_IDLE,
     CURRENT_HVAC_OFF,
+    HVAC_MODE_COOL,
     HVAC_MODE_HEAT,
     HVAC_MODE_OFF,
     HVAC_MODE_AUTO,
+    FAN_SPEED_AUTO,
+    FAN_SPEED_HIGH,
+    FAN_SPEED_MID,
+    FAN_SPEED_LOW,
+    FAN_SPEED_OFF,
     PRESET_FOLLOW_SCHEDULE,
     PRESET_OFF,
+    PRESET_ECO,
+    PRESET_TEMPORARY_HOLD,
     PRESET_PERMANENT_HOLD,
     SUPPORT_PRESET_MODE,
     SUPPORT_TARGET_TEMPERATURE,
@@ -33,10 +44,11 @@ from .exceptions import (
     IT600CommandError,
     IT600ConnectionError,
 )
-from .models import GatewayDevice, ClimateDevice, BinarySensorDevice, SwitchDevice, CoverDevice, SensorDevice
+from .models import GatewayDevice, ClimateDevice, FanCoilDevice, BinarySensorDevice, SwitchDevice, CoverDevice, SensorDevice
 
 _LOGGER = logging.getLogger("pyit600")
 
+import pdb
 
 class IT600Gateway:
     def __init__(
@@ -63,6 +75,9 @@ class IT600Gateway:
 
         self._climate_devices: Dict[str, ClimateDevice] = {}
         self._climate_update_callbacks: List[Callable[[Any], Awaitable[None]]] = []
+
+        self._fan_coil_devices: Dict[str, FanCoilDevice] = {}
+        self._fan_coil_update_callbacks: List[Callable[[Any], Awaitable[None]]] = []
 
         self._binary_sensor_devices: Dict[str, BinarySensorDevice] = {}
         self._binary_sensor_update_callbacks: List[Callable[[Any], Awaitable[None]]] = []
@@ -148,6 +163,15 @@ class IT600Gateway:
             await self._refresh_climate_devices(climate_devices, send_callback)
         except BaseException as e:
             _LOGGER.error("Failed to poll climate devices", exc_info=e)
+
+        try:
+            fan_coil_devices = list(
+                filter(lambda x: "sTherS" in x, all_devices["id"])
+            )
+
+            await self._refresh_fan_coil_devices(fan_coil_devices, send_callback)
+        except BaseException as e:
+            _LOGGER.error("Failed to poll fan coil devices", exc_info=e)
 
         try:
             binary_sensors = list(
@@ -507,6 +531,74 @@ class IT600Gateway:
         self._climate_devices = local_devices
         _LOGGER.debug("Refreshed %s climate devices", len(self._climate_devices))
 
+    async def _refresh_fan_coil_devices(self, devices: List[Any], send_callback=False):
+        local_devices = {}
+
+        if devices:
+            status = await self._make_encrypted_request(
+                "read",
+                {
+                    "requestAttr": "deviceid",
+                    "id": [{"data": device["data"]} for device in devices]
+                }
+            )
+
+            for device_status in status["id"]:
+                unique_id = device_status.get("data", {}).get("UniID", None)
+
+                if unique_id is None:
+                    continue
+
+                try:
+                    th = device_status.get("sTherS", None)
+
+                    if th is None:
+                        continue
+
+                    model: Optional[str] = device_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
+                    hold_type = device_status.get("sComm", {}).get("HoldType", None)
+                    fan_mode = device_status.get("sFanS", {}).get("FanMode", None)
+                    lock_key = device_status.get("sTherUIS", {}).get("LockKey", None)
+
+                    device = FanCoilDevice(
+                        available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
+                        name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
+                        unique_id=unique_id,
+                        temperature_unit=TEMP_CELSIUS,  # API always reports temperature as celsius
+                        precision=0.1,
+                        current_temperature=th["LocalTemperature_x100"] / 100,
+                        target_cooling_temperature=th["CoolingSetpoint_x100"] / 100,
+                        target_heating_temperature=th["HeatingSetpoint_x100"] / 100,
+                        min_cooling_temp=th.get("MinCoolSetpoint_x100", 500) / 100,
+                        min_heating_temp=th.get("MinHeatSetpoint_x100", 500) / 100,
+                        max_cooling_temp=th.get("MaxCoolSetpoint_x100", 4000) / 100,
+                        max_heating_temp=th.get("MaxHeatSetpoint_x100", 4000) / 100,
+                        fan_speed=FAN_SPEED_OFF if hold_type == 7 or fan_mode == 0 else FAN_SPEED_LOW if fan_mode == 1 else FAN_SPEED_MID if fan_mode == 2 else FAN_SPEED_HIGH if fan_mode == 3 else FAN_SPEED_AUTO,
+                        hvac_mode=HVAC_MODE_OFF if hold_type == 7 else HVAC_MODE_COOL if th["SystemMode"] == 3 else HVAC_MODE_HEAT,
+                        hvac_action=CURRENT_HVAC_OFF if hold_type == 7 else CURRENT_HVAC_IDLE if th["RunningState"] == 0 else CURRENT_HVAC_HEAT_IDLE if th["RunningMode"] == 4 and th["RunningState"] != 33 else CURRENT_HVAC_HEAT_IDLE if th["RunningMode"] == 4 else CURRENT_HVAC_COOL_IDLE if th["RunningMode"] == 3 and th["RunningState"] != 66 else CURRENT_HVAC_COOL_IDLE,
+                        hvac_modes=[HVAC_MODE_OFF, HVAC_MODE_HEAT, HVAC_MODE_COOL], # FC600 supports HVAC_MODE_AUTO, but cannot test as my Fan Coils do not.
+                        preset_mode=PRESET_OFF if hold_type == 7 else PRESET_ECO if hold_type == 10 else PRESET_PERMANENT_HOLD if hold_type == 2 else PRESET_TEMPORARY_HOLD if hold_type == 1 else PRESET_FOLLOW_SCHEDULE,
+                        preset_modes=[PRESET_FOLLOW_SCHEDULE, PRESET_TEMPORARY_HOLD, PRESET_PERMANENT_HOLD, PRESET_ECO, PRESET_OFF],
+                        supported_features=SUPPORT_TARGET_TEMPERATURE | SUPPORT_PRESET_MODE, # TODO: Don't know what this is???
+                        locked=True if lock_key == 1 else False,
+                        device_class="temperature",
+                        data=device_status["data"],
+                        manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
+                        model=device_status.get("DeviceL", {}).get("ModelIdentifier_i", None),
+                        sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
+                    )
+
+                    local_devices[device.unique_id] = device
+
+                    if send_callback:
+                        self._fan_coil_devices[device.unique_id] = device
+                        await self._send_fan_coil_update_callback(device_id=device.unique_id)
+                except BaseException as e:
+                    _LOGGER.error(f"Failed to poll device {unique_id}", exc_info=e)
+
+        self._fan_coil_devices = local_devices
+        _LOGGER.debug("Refreshed %s fan coil devices", len(self._fan_coil_devices))
+
     async def _send_climate_update_callback(self, device_id: str) -> None:
         """Internal method to notify all update callback subscribers."""
 
@@ -515,6 +607,15 @@ class IT600Gateway:
                 await update_callback(device_id=device_id)
         else:
             _LOGGER.error("Callback for climate updates has not been set")
+
+    async def _send_fan_coil_update_callback(self, device_id: str) -> None:
+        """Internal method to notify all update callback subscribers."""
+
+        if self._fan_coil_update_callbacks:
+            for update_callback in self._fan_coil_update_callbacks:
+                await update_callback(device_id=device_id)
+        else:
+            _LOGGER.error("Callback for fan coil updates has not been set")
 
     async def _send_binary_sensor_update_callback(self, device_id: str) -> None:
         """Internal method to notify all update callback subscribers."""
@@ -566,6 +667,16 @@ class IT600Gateway:
         """Public method to return the state of the specified climate device."""
 
         return self._climate_devices.get(device_id)
+
+    def get_fan_coil_devices(self) -> Dict[str, FanCoilDevice]:
+        """Public method to return the state of all Salus IT600 fan coil devices."""
+
+        return self._fan_coil_devices
+
+    def get_fan_coil_device(self, device_id: str) -> Optional[FanCoilDevice]:
+        """Public method to return the state of the specified fan coil device."""
+
+        return self._fan_coil_devices.get(device_id)
 
     def get_binary_sensor_devices(self) -> Dict[str, BinarySensorDevice]:
         """Public method to return the state of all Salus IT600 binary sensor devices."""
@@ -760,6 +871,132 @@ class IT600Gateway:
             },
         )
 
+    async def set_fan_coil_device_preset(self, device_id: str, preset: str) -> None:
+        """Public method for setting the fan coil preset."""
+
+        device = self.get_fan_coil_device(device_id)
+
+        if device is None:
+            _LOGGER.error("Cannot set mode: fan coil device not found with the specified id: %s", device_id)
+            return
+
+        await self._make_encrypted_request(
+            "write",
+            {
+                "requestAttr": "write",
+                "id": [
+                    {
+                        "data": device.data,
+                        "sComm": {
+                            "SetHoldType": 7 if preset == PRESET_OFF else 10 if preset == PRESET_ECO else 2 if preset == PRESET_PERMANENT_HOLD else 1 if preset == PRESET_TEMPORARY_HOLD else 0
+                        },
+                    }
+                ],
+            },
+        )
+
+    async def set_fan_coil_device_mode(self, device_id: str, mode: str) -> None:
+        """Public method for setting the fan coil mode."""
+
+        device = self.get_fan_coil_device(device_id)
+
+        if device is None:
+            _LOGGER.error("Cannot set mode: device not found with the specified id: %s", device_id)
+            return
+
+        await self._make_encrypted_request(
+            "write",
+            {
+                "requestAttr": "write",
+                "id": [
+                    {
+                        "data": device.data,
+                        "sTherS": {"SetSystemMode": 3 if mode == HVAC_MODE_COOL else HVAC_MODE_HEAT},
+                    }
+                ],
+            },
+        )
+
+    async def set_fan_coil_device_fan_speed(self, device_id: str, speed: str) -> None:
+        """Public method for setting the fan coil fan speed."""
+
+        device = self.get_fan_coil_device(device_id)
+
+        if device is None:
+            _LOGGER.error("Cannot set fan speed: device not found with the specified id: %s", device_id)
+            return
+
+        await self._make_encrypted_request(
+            "write",
+            {
+                "requestAttr": "write",
+                "id": [
+                    {
+                        "data": device.data,
+                        "sFanS": {"FanMode": 5 if speed == FAN_SPEED_AUTO else 3 if speed == FAN_SPEED_HIGH else 2 if speed == FAN_SPEED_MID else 1 if speed == FAN_SPEED_LOW else 0},
+                    }
+                ],
+            },
+        )
+
+    async def set_fan_coil_device_locked(self, device_id: str, locked: bool) -> None:
+        """Public method for setting the fan coil locked status."""
+
+        device = self.get_fan_coil_device(device_id)
+
+        if device is None:
+            _LOGGER.error("Cannot set locked status: device not found with the specified id: %s", device_id)
+            return
+
+        await self._make_encrypted_request(
+            "write",
+            {
+                "requestAttr": "write",
+                "id": [
+                    {
+                        "data": device.data,
+                        "sTherUIS": {"LockKey": 1 if locked else 0},
+                    }
+                ],
+            },
+        )
+
+    async def set_fan_coil_device_temperature(self, device_id: str, setpoint_celsius: float) -> None:
+        """Public method for setting the temperature."""
+
+        device = self.get_fan_coil_device(device_id)
+
+        if device is None:
+            _LOGGER.error("Cannot set mode: fan coil device not found with the specified id: %s", device_id)
+            return
+
+        if device.hvac_mode == HVAC_MODE_COOL:
+            await self._make_encrypted_request(
+                "write",
+                {
+                    "requestAttr": "write",
+                    "id": [
+                        {
+                            "data": device.data,
+                            "sTherS": {"SetCoolingSetpoint_x100": int(self.round_to_half(setpoint_celsius) * 100)},
+                        }
+                    ],
+                },
+            )
+        else:
+            await self._make_encrypted_request(
+                "write",
+                {
+                    "requestAttr": "write",
+                    "id": [
+                        {
+                            "data": device.data,
+                            "sTherS": {"SetHeatingSetpoint_x100": int(self.round_to_half(setpoint_celsius) * 100)},
+                        }
+                    ],
+                },
+            )
+
     @staticmethod
     def round_to_half(number: float) -> float:
         """Rounds number to half of the integer (eg. 1.01 -> 1, 1.4 -> 1.5, 1.8 -> 2)"""
@@ -770,6 +1007,11 @@ class IT600Gateway:
         """Public method to add a climate callback subscriber."""
 
         self._climate_update_callbacks.append(method)
+
+    async def add_fan_coil_update_callback(self, method: Callable[[Any], Awaitable[None]]) -> None:
+        """Public method to add a fan coil callback subscriber."""
+
+        self._fan_coil_update_callbacks.append(method)
 
     async def add_binary_sensor_update_callback(self, method: Callable[[Any], Awaitable[None]]) -> None:
         """Public method to add a binary sensor callback subscriber."""
