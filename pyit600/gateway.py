@@ -786,13 +786,13 @@ class IT600Gateway:
             },
         )
 
-    async def set_climate_device_fan_speed(self, device_id: str, speed: str) -> None:
-        """Public method for setting the hvac fan speed."""
+    async def set_climate_device_fan_mode(self, device_id: str, mode: str) -> None:
+        """Public method for setting the hvac fan mode."""
 
         device = self.get_climate_device(device_id)
 
         if device is None:
-            _LOGGER.error("Cannot set fan speed: device not found with the specified id: %s", device_id)
+            _LOGGER.error("Cannot set fan mode: device not found with the specified id: %s", device_id)
             return
 
         await self._make_encrypted_request(
@@ -802,7 +802,7 @@ class IT600Gateway:
                 "id": [
                     {
                         "data": device.data,
-                        "sFanS": { "FanMode": 5 if speed == FAN_SPEED_AUTO else 3 if speed == FAN_SPEED_HIGH else 2 if speed == FAN_SPEED_MID else 1 if speed == FAN_SPEED_LOW else 0 },
+                        "sFanS": { "FanMode": 5 if mode == FAN_MODE_AUTO else 3 if mode == FAN_MODE_HIGH else 2 if mode == FAN_MODE_MID else 1 if mode == FAN_MODE_LOW else 0 },
                     }
                 ],
             },
