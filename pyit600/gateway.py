@@ -505,7 +505,7 @@ class IT600Gateway:
                             device_class="temperature",
                             data=device_status["data"],
                             manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
-                            model=device_status.get("DeviceL", {}).get("ModelIdentifier_i", None),
+                            model=model,
                             sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
                         )
                     elif ther is not None and scomm is not None and sfans is not None:
@@ -535,7 +535,7 @@ class IT600Gateway:
                             device_class="temperature",
                             data=device_status["data"],
                             manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
-                            model=device_status.get("DeviceL", {}).get("ModelIdentifier_i", None),
+                            model=model,
                             sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
                         )
                     else:
@@ -746,6 +746,11 @@ class IT600Gateway:
             _LOGGER.error("Cannot set mode: climate device not found with the specified id: %s", device_id)
             return
 
+        if device.model == 'FC600':
+            request_data = { "sComm": { "SetHoldType": 7 if preset == PRESET_OFF else 10 if preset == PRESET_ECO else 2 if preset == PRESET_PERMANENT_HOLD else 1 if preset == PRESET_TEMPORARY_HOLD else 0 } }
+        else:
+            request_data = { "sIT600TH": { "SetHoldType": 7 if preset == PRESET_OFF else 2 if preset == PRESET_PERMANENT_HOLD else 0 } }
+
         await self._make_encrypted_request(
             "write",
             {
@@ -753,9 +758,7 @@ class IT600Gateway:
                 "id": [
                     {
                         "data": device.data,
-                        "sIT600TH": {
-                            "SetHoldType": 7 if preset == PRESET_OFF else 2 if preset == PRESET_PERMANENT_HOLD else 0
-                        },
+                        **request_data,
                     }
                 ],
             },
@@ -770,6 +773,11 @@ class IT600Gateway:
             _LOGGER.error("Cannot set mode: device not found with the specified id: %s", device_id)
             return
 
+        if device.model == 'FC600':
+            request_data = { "sTherS": { "SetSystemMode": 3 if mode == HVAC_MODE_COOL else HVAC_MODE_HEAT } }
+        else:
+            request_data = { "sIT600TH": { "SetHoldType": 7 if mode == HVAC_MODE_OFF else 0 } }
+
         await self._make_encrypted_request(
             "write",
             {
@@ -777,7 +785,51 @@ class IT600Gateway:
                 "id": [
                     {
                         "data": device.data,
-                        "sIT600TH": {"SetHoldType": 7 if mode == HVAC_MODE_OFF else 0},
+                        **request_data,
+                    }
+                ],
+            },
+        )
+
+    async def set_climate_device_fan_speed(self, device_id: str, speed: str) -> None:
+        """Public method for setting the hvac fan speed."""
+
+        device = self.get_climate_device(device_id)
+
+        if device is None:
+            _LOGGER.error("Cannot set fan speed: device not found with the specified id: %s", device_id)
+            return
+
+        await self._make_encrypted_request(
+            "write",
+            {
+                "requestAttr": "write",
+                "id": [
+                    {
+                        "data": device.data,
+                        "sFanS": { "FanMode": 5 if speed == FAN_SPEED_AUTO else 3 if speed == FAN_SPEED_HIGH else 2 if speed == FAN_SPEED_MID else 1 if speed == FAN_SPEED_LOW else 0 },
+                    }
+                ],
+            },
+        )
+
+    async def set_climate_device_locked(self, device_id: str, locked: bool) -> None:
+        """Public method for setting the hvac locked status."""
+
+        device = self.get_climate_device(device_id)
+
+        if device is None:
+            _LOGGER.error("Cannot set locked status: device not found with the specified id: %s", device_id)
+            return
+
+        await self._make_encrypted_request(
+            "write",
+            {
+                "requestAttr": "write",
+                "id": [
+                    {
+                        "data": device.data,
+                        "sTherUIS": { "LockKey": 1 if locked else 0 },
                     }
                 ],
             },
@@ -792,6 +844,14 @@ class IT600Gateway:
             _LOGGER.error("Cannot set mode: climate device not found with the specified id: %s", device_id)
             return
 
+        if device.model == 'FC600':
+          if device.hvac_mode == HVAC_MODE_COOL:
+              request_data = { "sTherS": { "SetCoolingSetpoint_x100": int(self.round_to_half(setpoint_celsius) * 100) } }
+          else:
+              request_data = { "sTherS": { "SetHeatingSetpoint_x100": int(self.round_to_half(setpoint_celsius) * 100) } }
+        else:
+          request_data = { "sIT600TH": { "SetHeatingSetpoint_x100": int(self.round_to_half(setpoint_celsius) * 100) } }
+
         await self._make_encrypted_request(
             "write",
             {
@@ -799,7 +859,7 @@ class IT600Gateway:
                 "id": [
                     {
                         "data": device.data,
-                        "sIT600TH": {"SetHeatingSetpoint_x100": int(self.round_to_half(setpoint_celsius) * 100)},
+                        **request_data,
                     }
                 ],
             },

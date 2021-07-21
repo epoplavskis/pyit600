@@ -97,8 +97,8 @@ async def main():
                 print(f"Climate device {climate_device_id} status:")
                 print(repr(climate_devices.get(climate_device_id)))
 
-                # print(f"Setting heating device {climate_device_id} temperature to 21 degrees celsius")
-                # await gateway.set_climate_device_temperature(climate_device_id, 21)
+                print(f"Setting heating device {climate_device_id} temperature to 32 degrees celsius")
+                await gateway.set_climate_device_temperature(climate_device_id, 32)
 
         # binary_sensor_devices = gateway.get_binary_sensor_devices()
 
