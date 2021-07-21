@@ -479,6 +479,19 @@ class IT600Gateway:
                     scomm = device_status.get("sComm", None)
                     sfans = device_status.get("sFanS", None)
 
+                    global_args = {
+                        "available": True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
+                        "name": json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
+                        "unique_id": unique_id,
+                        "temperature_unit": TEMP_CELSIUS,  # API always reports temperature as celsius
+                        "precision": 0.1,
+                        "device_class": "temperature",
+                        "data": device_status["data"],
+                        "manufacturer": device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
+                        "model": model,
+                        "sw_version": device_status.get("sZDO", {}).get("FirmwareVersion", None),
+                    }
+
                     if th is not None:
                         current_humidity: Optional[float] = None
 
@@ -486,11 +499,7 @@ class IT600Gateway:
                             current_humidity = th.get("SunnySetpoint_x100", None)  # Quantum thermostats store humidity there, other thermostats store there one of the setpoint temperatures
 
                         device = ClimateDevice(
-                            available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
-                            name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
-                            unique_id=unique_id,
-                            temperature_unit=TEMP_CELSIUS,  # API always reports temperature as celsius
-                            precision=0.1,
+                            **global_args,
                             current_humidity=current_humidity,
                             current_temperature=th["LocalTemperature_x100"] / 100,
                             target_temperature=th["HeatingSetpoint_x100"] / 100,
@@ -502,22 +511,13 @@ class IT600Gateway:
                             preset_mode=PRESET_OFF if th["HoldType"] == 7 else PRESET_PERMANENT_HOLD if th["HoldType"] == 2 else PRESET_FOLLOW_SCHEDULE,
                             preset_modes=[PRESET_FOLLOW_SCHEDULE, PRESET_PERMANENT_HOLD, PRESET_OFF],
                             supported_features=SUPPORT_TARGET_TEMPERATURE | SUPPORT_PRESET_MODE,
-                            device_class="temperature",
-                            data=device_status["data"],
-                            manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
-                            model=model,
-                            sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
                         )
                     elif ther is not None and scomm is not None and sfans is not None:
                         is_heating: bool = (ther["SystemMode"] == 4)
                         fan_mode: int = sfans.get("FanMode", 5)
 
                         device = ClimateDevice(
-                            available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
-                            name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
-                            unique_id=unique_id,
-                            temperature_unit=TEMP_CELSIUS,  # API always reports temperature as celsius
-                            precision=0.1,
+                            **global_args,
                             current_humidity=None,
                             current_temperature=ther["LocalTemperature_x100"] / 100,
                             target_temperature=(ther["HeatingSetpoint_x100"] / 100) if is_heating else (ther["CoolingSetpoint_x100"] / 100),
@@ -532,11 +532,6 @@ class IT600Gateway:
                             fan_modes=[FAN_MODE_AUTO, FAN_MODE_HIGH, FAN_MODE_MEDIUM, FAN_MODE_LOW, FAN_MODE_OFF],
                             locked=True if device_status.get("sTherUIS", {}).get("LockKey", 0) == 1 else False,
                             supported_features=SUPPORT_TARGET_TEMPERATURE | SUPPORT_PRESET_MODE | SUPPORT_FAN_MODE,
-                            device_class="temperature",
-                            data=device_status["data"],
-                            manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
-                            model=model,
-                            sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
                         )
                     else:
                         continue
