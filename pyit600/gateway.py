@@ -49,7 +49,6 @@ from .models import GatewayDevice, ClimateDevice, BinarySensorDevice, SwitchDevi
 
 _LOGGER = logging.getLogger("pyit600")
 
-
 class IT600Gateway:
     def __init__(
             self,
@@ -523,11 +522,11 @@ class IT600Gateway:
                             target_temperature=(ther["HeatingSetpoint_x100"] / 100) if is_heating else (ther["CoolingSetpoint_x100"] / 100),
                             max_temp=(ther.get("MaxHeatSetpoint_x100", 4000) / 100) if is_heating else (ther.get("MaxCoolSetpoint_x100", 4000) / 100),
                             min_temp=(ther.get("MinHeatSetpoint_x100", 500) / 100) if is_heating else (ther.get("MinCoolSetpoint_x100", 500) / 100),
-                            hvac_mode=HVAC_MODE_OFF if scomm["HoldType"] == 7 else HVAC_MODE_HEAT if ther["SystemMode"] == 4 else HVAC_MODE_COOL if ther["SystemMode"] == 3 else HVAC_MODE_AUTO,
+                            hvac_mode=HVAC_MODE_HEAT if ther["SystemMode"] == 4 else HVAC_MODE_COOL if ther["SystemMode"] == 3 else HVAC_MODE_AUTO,
                             hvac_action=CURRENT_HVAC_OFF if scomm["HoldType"] == 7 else CURRENT_HVAC_IDLE if ther["RunningState"] == 0 else CURRENT_HVAC_HEAT if is_heating and ther["RunningState"] == 33 else CURRENT_HVAC_HEAT_IDLE if is_heating else CURRENT_HVAC_COOL if ther["RunningState"] == 66 else CURRENT_HVAC_COOL_IDLE,
-                            hvac_modes=[HVAC_MODE_OFF, HVAC_MODE_HEAT, HVAC_MODE_COOL, HVAC_MODE_AUTO],
-                            preset_mode=PRESET_OFF if scomm["HoldType"] == 7 else PRESET_ECO if scomm["HoldType"] == 10 else PRESET_PERMANENT_HOLD if scomm["HoldType"] == 2 else PRESET_TEMPORARY_HOLD if scomm["HoldType"] == 1 else PRESET_FOLLOW_SCHEDULE,
-                            preset_modes=[PRESET_FOLLOW_SCHEDULE, PRESET_TEMPORARY_HOLD, PRESET_PERMANENT_HOLD, PRESET_ECO, PRESET_OFF],
+                            hvac_modes=[HVAC_MODE_HEAT, HVAC_MODE_COOL, HVAC_MODE_AUTO],
+                            preset_mode=PRESET_OFF if scomm["HoldType"] == 7 else PRESET_PERMANENT_HOLD if scomm["HoldType"] == 2 else PRESET_ECO if scomm["HoldType"] == 10 else PRESET_TEMPORARY_HOLD if scomm["HoldType"] == 1 else PRESET_FOLLOW_SCHEDULE,
+                            preset_modes=[PRESET_OFF, PRESET_PERMANENT_HOLD, PRESET_ECO, PRESET_TEMPORARY_HOLD, PRESET_FOLLOW_SCHEDULE],
                             fan_mode=FAN_MODE_OFF if fan_mode == 0 else FAN_MODE_HIGH if fan_mode == 3 else FAN_MODE_MEDIUM if fan_mode == 2 else FAN_MODE_LOW if fan_mode == 1 else FAN_MODE_AUTO, # fan_mode == 5 => FAN_MODE_AUTO
                             fan_modes=[FAN_MODE_AUTO, FAN_MODE_HIGH, FAN_MODE_MEDIUM, FAN_MODE_LOW, FAN_MODE_OFF],
                             locked=True if device_status.get("sTherUIS", {}).get("LockKey", 0) == 1 else False,
@@ -769,7 +768,7 @@ class IT600Gateway:
             return
 
         if device.model == 'FC600':
-            request_data = { "sTherS": { "SetSystemMode": 3 if mode == HVAC_MODE_COOL else HVAC_MODE_HEAT } }
+            request_data = { "sTherS": { "SetSystemMode": 4 if mode == HVAC_MODE_HEAT else 3 if mode == HVAC_MODE_COOL else HVAC_MODE_AUTO } }
         else:
             request_data = { "sIT600TH": { "SetHoldType": 7 if mode == HVAC_MODE_OFF else 0 } }
 
@@ -795,6 +794,8 @@ class IT600Gateway:
             _LOGGER.error("Cannot set fan mode: device not found with the specified id: %s", device_id)
             return
 
+        request_data = { "sFanS": { "FanMode": 5 if mode == FAN_MODE_AUTO else 3 if mode == FAN_MODE_HIGH else 2 if mode == FAN_MODE_MID else 1 if mode == FAN_MODE_LOW else 0 } }
+
         await self._make_encrypted_request(
             "write",
             {
@@ -802,7 +803,7 @@ class IT600Gateway:
                 "id": [
                     {
                         "data": device.data,
-                        "sFanS": { "FanMode": 5 if mode == FAN_MODE_AUTO else 3 if mode == FAN_MODE_HIGH else 2 if mode == FAN_MODE_MID else 1 if mode == FAN_MODE_LOW else 0 },
+                        **request_data,
                     }
                 ],
             },
@@ -817,6 +818,8 @@ class IT600Gateway:
             _LOGGER.error("Cannot set locked status: device not found with the specified id: %s", device_id)
             return
 
+        request_data = { "sTherUIS": { "LockKey": 1 if locked else 0 } }
+
         await self._make_encrypted_request(
             "write",
             {
@@ -824,7 +827,7 @@ class IT600Gateway:
                 "id": [
                     {
                         "data": device.data,
-                        "sTherUIS": { "LockKey": 1 if locked else 0 },
+                        **request_data,
                     }
                 ],
             },
