@@ -69,6 +69,7 @@ Thermostats:
 * VS10WRF/VS10BRF
 * VS20WRF/VS20BRF
 * SQ610RF
+* FC600
 
 Binary sensors:
 * SW600
@@ -101,7 +102,6 @@ These switch devices do not work yet:
 
 These thermostats devices have not been tested, but may work:
 * SQ610
-* FC600
 
 These switch devices have not been tested, but may work:
 * SP600
