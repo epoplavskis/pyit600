@@ -46,6 +46,7 @@ Thermostats:
 * VS10WRF/VS10BRF
 * VS20WRF/VS20BRF
 * SQ610RF
+* FC600
 
 Binary sensors:
 * SW600

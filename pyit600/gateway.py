@@ -12,20 +12,32 @@ from aiohttp import client_exceptions
 
 from .const import (
     CURRENT_HVAC_HEAT,
+    CURRENT_HVAC_HEAT_IDLE,
+    CURRENT_HVAC_COOL,
+    CURRENT_HVAC_COOL_IDLE,
     CURRENT_HVAC_IDLE,
     CURRENT_HVAC_OFF,
     HVAC_MODE_HEAT,
+    HVAC_MODE_COOL,
     HVAC_MODE_OFF,
     HVAC_MODE_AUTO,
     PRESET_FOLLOW_SCHEDULE,
     PRESET_OFF,
     PRESET_PERMANENT_HOLD,
+    PRESET_TEMPORARY_HOLD,
+    PRESET_ECO,
+    SUPPORT_FAN_MODE,
     SUPPORT_PRESET_MODE,
     SUPPORT_TARGET_TEMPERATURE,
     TEMP_CELSIUS,
     SUPPORT_OPEN,
     SUPPORT_CLOSE,
-    SUPPORT_SET_POSITION
+    SUPPORT_SET_POSITION,
+    FAN_MODE_AUTO,
+    FAN_MODE_HIGH,
+    FAN_MODE_MEDIUM,
+    FAN_MODE_LOW,
+    FAN_MODE_OFF
 )
 from .encryptor import IT600Encryptor
 from .exceptions import (
@@ -36,7 +48,6 @@ from .exceptions import (
 from .models import GatewayDevice, ClimateDevice, BinarySensorDevice, SwitchDevice, CoverDevice, SensorDevice
 
 _LOGGER = logging.getLogger("pyit600")
-
 
 class IT600Gateway:
     def __init__(
@@ -142,7 +153,7 @@ class IT600Gateway:
 
         try:
             climate_devices = list(
-                filter(lambda x: "sIT600TH" in x, all_devices["id"])
+                filter(lambda x: ("sIT600TH" in x) or ("sTherS" in x), all_devices["id"])
             )
 
             await self._refresh_climate_devices(climate_devices, send_callback)
@@ -460,41 +471,69 @@ class IT600Gateway:
                     continue
 
                 try:
-                    th = device_status.get("sIT600TH", None)
-
-                    if th is None:
-                        continue
-
                     model: Optional[str] = device_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
 
-                    current_humidity: Optional[float] = None
+                    th = device_status.get("sIT600TH", None)
+                    ther = device_status.get("sTherS", None)
+                    scomm = device_status.get("sComm", None)
+                    sfans = device_status.get("sFanS", None)
 
-                    if model == "SQ610" or model == "SQ610RF":
-                        current_humidity = th.get("SunnySetpoint_x100", None)
+                    global_args = {
+                        "available": True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
+                        "name": json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
+                        "unique_id": unique_id,
+                        "temperature_unit": TEMP_CELSIUS,  # API always reports temperature as celsius
+                        "precision": 0.1,
+                        "device_class": "temperature",
+                        "data": device_status["data"],
+                        "manufacturer": device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
+                        "model": model,
+                        "sw_version": device_status.get("sZDO", {}).get("FirmwareVersion", None),
+                    }
 
-                    device = ClimateDevice(
-                        available=True if device_status.get("sZDOInfo", {}).get("OnlineStatus_i", 1) == 1 else False,
-                        name=json.loads(device_status.get("sZDO", {}).get("DeviceName", '{"deviceName": "Unknown"}'))["deviceName"],
-                        unique_id=unique_id,
-                        temperature_unit=TEMP_CELSIUS,  # API always reports temperature as celsius
-                        precision=0.1,
-                        current_humidity=current_humidity,
-                        current_temperature=th["LocalTemperature_x100"] / 100,
-                        target_temperature=th["HeatingSetpoint_x100"] / 100,
-                        max_temp=th.get("MaxHeatSetpoint_x100", 3500) / 100,
-                        min_temp=th.get("MinHeatSetpoint_x100", 500) / 100,
-                        hvac_mode=HVAC_MODE_OFF if th["HoldType"] == 7 else HVAC_MODE_HEAT if th["HoldType"] == 2 else HVAC_MODE_AUTO,
-                        hvac_action=CURRENT_HVAC_OFF if th["HoldType"] == 7 else CURRENT_HVAC_IDLE if th["RunningState"] % 2 == 0 else CURRENT_HVAC_HEAT,  # RunningState 0 or 128 => idle, 1 or 129 => heating
-                        hvac_modes=[HVAC_MODE_OFF, HVAC_MODE_HEAT, HVAC_MODE_AUTO],
-                        preset_mode=PRESET_OFF if th["HoldType"] == 7 else PRESET_PERMANENT_HOLD if th["HoldType"] == 2 else PRESET_FOLLOW_SCHEDULE,
-                        preset_modes=[PRESET_FOLLOW_SCHEDULE, PRESET_PERMANENT_HOLD, PRESET_OFF],
-                        supported_features=SUPPORT_TARGET_TEMPERATURE | SUPPORT_PRESET_MODE,
-                        device_class="temperature",
-                        data=device_status["data"],
-                        manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
-                        model=device_status.get("DeviceL", {}).get("ModelIdentifier_i", None),
-                        sw_version=device_status.get("sZDO", {}).get("FirmwareVersion", None)
-                    )
+                    if th is not None:
+                        current_humidity: Optional[float] = None
+
+                        if model == "SQ610" or model == "SQ610RF":
+                            current_humidity = th.get("SunnySetpoint_x100", None)  # Quantum thermostats store humidity there, other thermostats store there one of the setpoint temperatures
+
+                        device = ClimateDevice(
+                            **global_args,
+                            current_humidity=current_humidity,
+                            current_temperature=th["LocalTemperature_x100"] / 100,
+                            target_temperature=th["HeatingSetpoint_x100"] / 100,
+                            max_temp=th.get("MaxHeatSetpoint_x100", 3500) / 100,
+                            min_temp=th.get("MinHeatSetpoint_x100", 500) / 100,
+                            hvac_mode=HVAC_MODE_OFF if th["HoldType"] == 7 else HVAC_MODE_HEAT if th["HoldType"] == 2 else HVAC_MODE_AUTO,
+                            hvac_action=CURRENT_HVAC_OFF if th["HoldType"] == 7 else CURRENT_HVAC_IDLE if th["RunningState"] % 2 == 0 else CURRENT_HVAC_HEAT,  # RunningState 0 or 128 => idle, 1 or 129 => heating
+                            hvac_modes=[HVAC_MODE_OFF, HVAC_MODE_HEAT, HVAC_MODE_AUTO],
+                            preset_mode=PRESET_OFF if th["HoldType"] == 7 else PRESET_PERMANENT_HOLD if th["HoldType"] == 2 else PRESET_FOLLOW_SCHEDULE,
+                            preset_modes=[PRESET_FOLLOW_SCHEDULE, PRESET_PERMANENT_HOLD, PRESET_OFF],
+                            supported_features=SUPPORT_TARGET_TEMPERATURE | SUPPORT_PRESET_MODE,
+                        )
+                    elif ther is not None and scomm is not None and sfans is not None:
+                        is_heating: bool = (ther["SystemMode"] == 4)
+                        fan_mode: int = sfans.get("FanMode", 5)
+
+                        device = ClimateDevice(
+                            **global_args,
+                            current_humidity=None,
+                            current_temperature=ther["LocalTemperature_x100"] / 100,
+                            target_temperature=(ther["HeatingSetpoint_x100"] / 100) if is_heating else (ther["CoolingSetpoint_x100"] / 100),
+                            max_temp=(ther.get("MaxHeatSetpoint_x100", 4000) / 100) if is_heating else (ther.get("MaxCoolSetpoint_x100", 4000) / 100),
+                            min_temp=(ther.get("MinHeatSetpoint_x100", 500) / 100) if is_heating else (ther.get("MinCoolSetpoint_x100", 500) / 100),
+                            hvac_mode=HVAC_MODE_HEAT if ther["SystemMode"] == 4 else HVAC_MODE_COOL if ther["SystemMode"] == 3 else HVAC_MODE_AUTO,
+                            hvac_action=CURRENT_HVAC_OFF if scomm["HoldType"] == 7 else CURRENT_HVAC_IDLE if ther["RunningState"] == 0 else CURRENT_HVAC_HEAT if is_heating and ther["RunningState"] == 33 else CURRENT_HVAC_HEAT_IDLE if is_heating else CURRENT_HVAC_COOL if ther["RunningState"] == 66 else CURRENT_HVAC_COOL_IDLE,
+                            hvac_modes=[HVAC_MODE_HEAT, HVAC_MODE_COOL, HVAC_MODE_AUTO],
+                            preset_mode=PRESET_OFF if scomm["HoldType"] == 7 else PRESET_PERMANENT_HOLD if scomm["HoldType"] == 2 else PRESET_ECO if scomm["HoldType"] == 10 else PRESET_TEMPORARY_HOLD if scomm["HoldType"] == 1 else PRESET_FOLLOW_SCHEDULE,
+                            preset_modes=[PRESET_OFF, PRESET_PERMANENT_HOLD, PRESET_ECO, PRESET_TEMPORARY_HOLD, PRESET_FOLLOW_SCHEDULE],
+                            fan_mode=FAN_MODE_OFF if fan_mode == 0 else FAN_MODE_HIGH if fan_mode == 3 else FAN_MODE_MEDIUM if fan_mode == 2 else FAN_MODE_LOW if fan_mode == 1 else FAN_MODE_AUTO, # fan_mode == 5 => FAN_MODE_AUTO
+                            fan_modes=[FAN_MODE_AUTO, FAN_MODE_HIGH, FAN_MODE_MEDIUM, FAN_MODE_LOW, FAN_MODE_OFF],
+                            locked=True if device_status.get("sTherUIS", {}).get("LockKey", 0) == 1 else False,
+                            supported_features=SUPPORT_TARGET_TEMPERATURE | SUPPORT_PRESET_MODE | SUPPORT_FAN_MODE,
+                        )
+                    else:
+                        continue
 
                     local_devices[device.unique_id] = device
 
@@ -701,6 +740,11 @@ class IT600Gateway:
             _LOGGER.error("Cannot set mode: climate device not found with the specified id: %s", device_id)
             return
 
+        if device.model == 'FC600':
+            request_data = { "sComm": { "SetHoldType": 7 if preset == PRESET_OFF else 10 if preset == PRESET_ECO else 2 if preset == PRESET_PERMANENT_HOLD else 1 if preset == PRESET_TEMPORARY_HOLD else 0 } }
+        else:
+            request_data = { "sIT600TH": { "SetHoldType": 7 if preset == PRESET_OFF else 2 if preset == PRESET_PERMANENT_HOLD else 0 } }
+
         await self._make_encrypted_request(
             "write",
             {
@@ -708,9 +752,7 @@ class IT600Gateway:
                 "id": [
                     {
                         "data": device.data,
-                        "sIT600TH": {
-                            "SetHoldType": 7 if preset == PRESET_OFF else 2 if preset == PRESET_PERMANENT_HOLD else 0
-                        },
+                        **request_data,
                     }
                 ],
             },
@@ -725,6 +767,11 @@ class IT600Gateway:
             _LOGGER.error("Cannot set mode: device not found with the specified id: %s", device_id)
             return
 
+        if device.model == 'FC600':
+            request_data = { "sTherS": { "SetSystemMode": 4 if mode == HVAC_MODE_HEAT else 3 if mode == HVAC_MODE_COOL else HVAC_MODE_AUTO } }
+        else:
+            request_data = { "sIT600TH": { "SetHoldType": 7 if mode == HVAC_MODE_OFF else 0 } }
+
         await self._make_encrypted_request(
             "write",
             {
@@ -732,7 +779,55 @@ class IT600Gateway:
                 "id": [
                     {
                         "data": device.data,
-                        "sIT600TH": {"SetHoldType": 7 if mode == HVAC_MODE_OFF else 0},
+                        **request_data,
+                    }
+                ],
+            },
+        )
+
+    async def set_climate_device_fan_mode(self, device_id: str, mode: str) -> None:
+        """Public method for setting the hvac fan mode."""
+
+        device = self.get_climate_device(device_id)
+
+        if device is None:
+            _LOGGER.error("Cannot set fan mode: device not found with the specified id: %s", device_id)
+            return
+
+        request_data = { "sFanS": { "FanMode": 5 if mode == FAN_MODE_AUTO else 3 if mode == FAN_MODE_HIGH else 2 if mode == FAN_MODE_MID else 1 if mode == FAN_MODE_LOW else 0 } }
+
+        await self._make_encrypted_request(
+            "write",
+            {
+                "requestAttr": "write",
+                "id": [
+                    {
+                        "data": device.data,
+                        **request_data,
+                    }
+                ],
+            },
+        )
+
+    async def set_climate_device_locked(self, device_id: str, locked: bool) -> None:
+        """Public method for setting the hvac locked status."""
+
+        device = self.get_climate_device(device_id)
+
+        if device is None:
+            _LOGGER.error("Cannot set locked status: device not found with the specified id: %s", device_id)
+            return
+
+        request_data = { "sTherUIS": { "LockKey": 1 if locked else 0 } }
+
+        await self._make_encrypted_request(
+            "write",
+            {
+                "requestAttr": "write",
+                "id": [
+                    {
+                        "data": device.data,
+                        **request_data,
                     }
                 ],
             },
@@ -747,6 +842,14 @@ class IT600Gateway:
             _LOGGER.error("Cannot set mode: climate device not found with the specified id: %s", device_id)
             return
 
+        if device.model == 'FC600':
+          if device.hvac_mode == HVAC_MODE_COOL:
+              request_data = { "sTherS": { "SetCoolingSetpoint_x100": int(self.round_to_half(setpoint_celsius) * 100) } }
+          else:
+              request_data = { "sTherS": { "SetHeatingSetpoint_x100": int(self.round_to_half(setpoint_celsius) * 100) } }
+        else:
+          request_data = { "sIT600TH": { "SetHeatingSetpoint_x100": int(self.round_to_half(setpoint_celsius) * 100) } }
+
         await self._make_encrypted_request(
             "write",
             {
@@ -754,7 +857,7 @@ class IT600Gateway:
                 "id": [
                     {
                         "data": device.data,
-                        "sIT600TH": {"SetHeatingSetpoint_x100": int(self.round_to_half(setpoint_celsius) * 100)},
+                        **request_data,
                     }
                 ],
             },
