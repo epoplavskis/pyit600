@@ -30,6 +30,7 @@ class ClimateDevice(NamedTuple):
     preset_modes: List[str]
     fan_mode: Optional[str]
     fan_modes: Optional[List[str]]
+    locked: Optional[bool]
     supported_features: int
     device_class: str
     data: dict

@@ -28,12 +28,15 @@ HVAC_MODE_AUTO = "auto"
 # HVAC states
 CURRENT_HVAC_OFF = "off"
 CURRENT_HVAC_HEAT = "heating"
+CURRENT_HVAC_HEAT_IDLE = "heating (idling)"
 CURRENT_HVAC_COOL = "cooling"
+CURRENT_HVAC_COOL_IDLE = "cooling (idling)"
 CURRENT_HVAC_IDLE = "idle"
 
 # Supported presets
 PRESET_FOLLOW_SCHEDULE = "Follow Schedule"
 PRESET_PERMANENT_HOLD = "Permanent Hold"
+PRESET_TEMPORARY_HOLD = "Temporary Hold"
 PRESET_ECO = "Eco"
 PRESET_OFF = "Off"
 
