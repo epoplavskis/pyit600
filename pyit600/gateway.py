@@ -509,6 +509,9 @@ class IT600Gateway:
                             hvac_modes=[HVAC_MODE_OFF, HVAC_MODE_HEAT, HVAC_MODE_AUTO],
                             preset_mode=PRESET_OFF if th["HoldType"] == 7 else PRESET_PERMANENT_HOLD if th["HoldType"] == 2 else PRESET_FOLLOW_SCHEDULE,
                             preset_modes=[PRESET_FOLLOW_SCHEDULE, PRESET_PERMANENT_HOLD, PRESET_OFF],
+                            fan_mode=None,
+                            fan_modes=None,
+                            locked=None,
                             supported_features=SUPPORT_TARGET_TEMPERATURE | SUPPORT_PRESET_MODE,
                         )
                     elif ther is not None and scomm is not None and sfans is not None:
