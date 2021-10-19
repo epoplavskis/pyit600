@@ -67,9 +67,6 @@ Cover devices:
 
 ### Unsupported devices
 
-These thermostats are currently not supported:
-* FC600
-
 Buttons perform actions only in Salus Smart Home app:
 * SB600
 * CSB600
