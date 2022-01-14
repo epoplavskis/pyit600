@@ -82,7 +82,9 @@ These binary sensors have not been tested, but may work:
 
 ### Troubleshooting
 
-Check if you have "Local Wifi Mode" enabled:
+If you can't connect using EUID written down on the bottom of your gateway (which looks something like 001E5E0D32906128), try using 0000000000000000 as EUID.
+
+Also check if you have "Local Wifi Mode" enabled:
 * Open Smart Home app on your phone
 * Sign in
 * Double tap your Gateway to open info screen
