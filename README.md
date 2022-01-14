@@ -45,6 +45,7 @@ Thermostats:
 * TS600
 * VS10WRF/VS10BRF
 * VS20WRF/VS20BRF
+* SQ610
 * SQ610RF
 * FC600
 
@@ -72,9 +73,6 @@ Buttons perform actions only in Salus Smart Home app:
 * CSB600
 
 ### Untested devices
-
-These thermostats devices have not been tested, but may work:
-* SQ610
 
 These switch devices have not been tested, but may work:
 * SP600
