@@ -14,7 +14,7 @@ pip install pyit600
 ```
 
 ## Usage
- - Instantiate the IT600Gateway device with local ip address and EUID of your gateway. You can find EUID written down on the bottom of your gateway (eg. 001E5E0D32906128).
+ - Instantiate the IT600Gateway device with local ip address and EUID of your gateway. You can find EUID written down on the bottom of your gateway (eg. `001E5E0D32906128`).
  - Status can be polled using the `poll_status()` command.
  - Callbacks to be notified of state updates can be added with the `add_climate_update_callback(method)` or `add_sensor_update_callback(method)` method.
 
@@ -82,7 +82,7 @@ These binary sensors have not been tested, but may work:
 
 ### Troubleshooting
 
-If you can't connect using EUID written down on the bottom of your gateway (which looks something like 001E5E0D32906128), try using 0000000000000000 as EUID.
+If you can't connect using EUID written down on the bottom of your gateway (which looks something like `001E5E0D32906128`), try using `0000000000000000` as EUID.
 
 Also check if you have "Local Wifi Mode" enabled:
 * Open Smart Home app on your phone
