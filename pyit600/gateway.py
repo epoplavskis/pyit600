@@ -162,7 +162,10 @@ class IT600Gateway:
 
         try:
             binary_sensors = list(
-                filter(lambda x: "sIASZS" in x, all_devices["id"])
+                filter(lambda x: "sIASZS" in x or
+                                 ("sBasicS" in x and
+                                  "ModelIdentifier" in x["sBasicS"] and
+                                  x["sBasicS"]["ModelIdentifier"] == "it600MINITRV"), all_devices["id"])
             )
 
             await self._refresh_binary_sensor_devices(binary_sensors, send_callback)
@@ -416,12 +419,14 @@ class IT600Gateway:
                     continue
 
                 try:
-                    is_on: Optional[bool] = device_status.get("sIASZS", {}).get("ErrorIASZSAlarmed1", None)
+                    model: Optional[str] = device_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
+                    if model == "it600MINITRV":
+                        is_on: Optional[bool] = device_status.get("sIT600I", {}).get("RelayStatus", None)
+                    else:
+                        is_on: Optional[bool] = device_status.get("sIASZS", {}).get("ErrorIASZSAlarmed1", None)
 
                     if is_on is None:
                         continue
-
-                    model: Optional[str] = device_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
 
                     if model == "SB600":
                         continue  # Skip button
@@ -434,6 +439,7 @@ class IT600Gateway:
                         device_class="window" if (model == "SW600" or model == "OS600") else
                             "moisture" if model == "WLS600" else
                             "smoke" if model == "SmokeSensor-EM" else
+                            "valve" if model == "it600MINITRV" else
                             None,
                         data=device_status["data"],
                         manufacturer=device_status.get("sBasicS", {}).get("ManufactureName", "SALUS"),
