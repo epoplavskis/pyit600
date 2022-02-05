@@ -2,6 +2,7 @@
 
 ## For end users
 See https://github.com/jvitkauskas/homeassistant_salus to use this in Home Assistant.
+
 FHEM users might be interested in https://github.com/dominikkarall/fhempy which provides subset of functionality.
 
 ## About
