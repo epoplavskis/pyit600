@@ -56,6 +56,8 @@ Binary sensors:
 * WLS600
 * OS600
 * SD600 (sometimes gateway may not expose required information for these devices to be detected, reason is unknown)
+* TRV10RFM (only heating state on/off)
+* RX10RF (only heating state on/off)
 
 Temperature sensors:
 * PS600
