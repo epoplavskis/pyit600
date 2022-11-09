@@ -501,7 +501,7 @@ class IT600Gateway:
                     if th is not None:
                         current_humidity: Optional[float] = None
 
-                        if model == "SQ610" or model == "SQ610RF":
+                        if model is not None and "SQ610" in model:
                             current_humidity = th.get("SunnySetpoint_x100", None)  # Quantum thermostats store humidity there, other thermostats store there one of the setpoint temperatures
 
                         device = ClimateDevice(
