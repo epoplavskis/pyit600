@@ -1,7 +1,7 @@
 # Python: Asynchronous client for Salus iT600 devices
 
 ## For end users
-See https://github.com/jvitkauskas/homeassistant_salus to use this in Home Assistant.
+See https://github.com/epoplavskis/homeassistant_salus to use this in Home Assistant.
 
 FHEM users might be interested in https://github.com/dominikkarall/fhempy which provides subset of functionality.
 
