@@ -119,7 +119,7 @@ class IT600Gateway:
             return gateway["sGateway"]["NetworkLANMAC"]
         except IT600ConnectionError as ae:
             try:
-                with async_timeout.timeout(self._request_timeout):
+                async with async_timeout.timeout(self._request_timeout):
                     await self._session.get(f"http://{self._host}:{self._port}/")
             except Exception:
                 raise IT600ConnectionError(
@@ -165,7 +165,7 @@ class IT600Gateway:
                 filter(lambda x: "sIASZS" in x or
                                  ("sBasicS" in x and
                                   "ModelIdentifier" in x["sBasicS"] and
-                                  x["sBasicS"]["ModelIdentifier"] in ["it600MINITRV", "it600Receiver"]), all_devices["id"])
+                                  x["sBasicS"]["ModelIdentifier"] in ["it600MINITRV", "it600Receiver", "SmokeSensor-EM"]), all_devices["id"])
             )
 
             await self._refresh_binary_sensor_devices(binary_sensors, send_callback)
@@ -402,6 +402,7 @@ class IT600Gateway:
 
     async def _refresh_binary_sensor_devices(self, devices: List[Any], send_callback=False):
         local_devices = {}
+        _LOGGER.debug(f"Logging  _refresh_binary_sensor_devices: {devices}")
 
         if devices:
             status = await self._make_encrypted_request(
@@ -422,6 +423,13 @@ class IT600Gateway:
                     model: Optional[str] = device_status.get("DeviceL", {}).get("ModelIdentifier_i", None)
                     if model in ["it600MINITRV", "it600Receiver"]:
                         is_on: Optional[bool] = device_status.get("sIT600I", {}).get("RelayStatus", None)
+                    elif model == "SmokeSensor-EM":
+                        # First try to get the standard alarm attribute
+                        is_on: Optional[bool] = device_status.get("sIASZS", {}).get("ErrorIASZSAlarmed1", None)
+                        # If it doesn't exist, default to 0 (not alarmed)
+                        if is_on is None:
+                            is_on = 0
+                        _LOGGER.debug(f"Smoke sensor is_on: {is_on}")
                     else:
                         is_on: Optional[bool] = device_status.get("sIASZS", {}).get("ErrorIASZSAlarmed1", None)
 
@@ -449,6 +457,8 @@ class IT600Gateway:
                     )
 
                     local_devices[device.unique_id] = device
+                    _LOGGER.debug(f"Detected device: {model}, Device Class: {device}, Unique ID: {device_status['data']['UniID']}")
+
 
                     if send_callback:
                         self._binary_sensor_devices[device.unique_id] = device
@@ -919,7 +929,7 @@ class IT600Gateway:
                 if self._debug:
                     _LOGGER.debug("Gateway request: POST %s\n%s\n", request_url, request_body_json)
 
-                with async_timeout.timeout(self._request_timeout):
+                async with async_timeout.timeout(self._request_timeout):
                     resp = await self._session.post(
                         request_url,
                         data=self._encryptor.encrypt(request_body_json),
@@ -929,7 +939,12 @@ class IT600Gateway:
                     response_json_string = self._encryptor.decrypt(response_bytes)
 
                     if self._debug:
-                        _LOGGER.debug("Gateway response:\n%s\n", response_json_string)
+                        try:
+                            response_json = json.loads(response_json_string)  # Parse the string into JSON
+                            _LOGGER.debug("Gateway response:\n%s\n", json.dumps(response_json, indent=4))  # Pretty print JSON
+                        except json.JSONDecodeError as e:
+                            _LOGGER.error("Failed to decode JSON response: %s\n", e)
+                            _LOGGER.debug("Raw Gateway response:\n%s\n", response_json_string)
 
                     response_json = json.loads(response_json_string)
 
@@ -953,7 +968,8 @@ class IT600Gateway:
                     "check if you have specified host/IP address correctly"
                 ) from e
             except Exception as e:
-                _LOGGER.error("Exception. %s / %s", type(e), repr(e.args), e)
+                _LOGGER.error("Exception: %s", repr(e))
+#                _LOGGER.error("Exception. %s / %s", type(e), repr(e.args), e)
                 raise IT600CommandError(
                     "Unknown error occurred while communicating with iT600 gateway"
                 ) from e
