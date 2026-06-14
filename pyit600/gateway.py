@@ -119,7 +119,7 @@ class IT600Gateway:
             return gateway["sGateway"]["NetworkLANMAC"]
         except IT600ConnectionError as ae:
             try:
-                with async_timeout.timeout(self._request_timeout):
+                async with async_timeout.timeout(self._request_timeout):
                     await self._session.get(f"http://{self._host}:{self._port}/")
             except Exception:
                 raise IT600ConnectionError(
@@ -504,9 +504,22 @@ class IT600Gateway:
                         if model is not None and "SQ610" in model:
                             current_humidity = th.get("SunnySetpoint_x100", None)  # Quantum thermostats store humidity there, other thermostats store there one of the setpoint temperatures
 
+                        # Comfort warm floor level (0=off, 1-3=level) is encoded in
+                        # byte 39 of the "Schedule" blob. It only applies to underfloor
+                        # heating setups, so it is exposed only for thermostats that are
+                        # NOT paired with a radiator valve (TRV); for radiator + TRV
+                        # thermostats the feature is meaningless and stays at 0.
+                        paired_trv = th.get("PairedTRVShortID", "") or ""
+                        has_trv = bool(paired_trv) and not paired_trv.upper().startswith("FFFF")
+                        schedule = th.get("Schedule")
+                        comfort_floor_level = None
+                        if not has_trv and isinstance(schedule, str) and len(schedule) >= 80:
+                            comfort_floor_level = bytes.fromhex(schedule)[39]
+
                         device = ClimateDevice(
                             **global_args,
                             current_humidity=current_humidity,
+                            comfort_floor_level=comfort_floor_level,
                             current_temperature=th["LocalTemperature_x100"] / 100,
                             target_temperature=th["HeatingSetpoint_x100"] / 100,
                             max_temp=th.get("MaxHeatSetpoint_x100", 3500) / 100,
@@ -528,6 +541,7 @@ class IT600Gateway:
                         device = ClimateDevice(
                             **global_args,
                             current_humidity=None,
+                            comfort_floor_level=None,
                             current_temperature=ther["LocalTemperature_x100"] / 100,
                             target_temperature=(ther["HeatingSetpoint_x100"] / 100) if is_heating else (ther["CoolingSetpoint_x100"] / 100),
                             max_temp=(ther.get("MaxHeatSetpoint_x100", 4000) / 100) if is_heating else (ther.get("MaxCoolSetpoint_x100", 4000) / 100),
@@ -873,6 +887,63 @@ class IT600Gateway:
             },
         )
 
+    async def set_climate_device_comfort_floor_level(self, device_id: str, level: int) -> None:
+        """Set the comfort warm floor level (0=off, 1-3=level).
+
+        The level is sent through the sIT600I:SetCommand_d command channel as a
+        copy of the thermostat's current "Schedule" blob (which encodes the level
+        at byte 39) with an incremented sequence counter. The two trailing bytes
+        depend only on the sequence counter (they are not a content checksum).
+        Reverse-engineered from the official Salus app's local API traffic.
+        """
+        if level not in (0, 1, 2, 3):
+            raise ValueError("comfort floor level must be 0, 1, 2 or 3")
+
+        device = self.get_climate_device(device_id)
+        if device is None:
+            _LOGGER.error("Cannot set comfort floor level: climate device not found: %s", device_id)
+            return
+
+        # Read the thermostat's current Schedule blob to reuse its weekly program.
+        status = await self._make_encrypted_request(
+            "read",
+            {"requestAttr": "deviceid", "id": [{"data": device.data}]},
+        )
+        th = next((d.get("sIT600TH", {}) for d in status.get("id", [])
+                   if d.get("data", {}).get("UniID") == device.unique_id), {})
+        schedule = th.get("Schedule")
+        if not isinstance(schedule, str) or len(schedule) < 80:
+            _LOGGER.error("Cannot set comfort floor level: thermostat %s does not expose the feature", device_id)
+            return
+
+        base = bytearray.fromhex(schedule)
+        seq = (base[1] + 1) & 0xff  # app increments the sequence counter on each command
+
+        body = bytearray()
+        body.append(0x73)                       # command marker (Schedule uses 0x72)
+        body.append(seq)                         # sequence counter
+        body += base[2:39]                       # weekly program (unchanged)
+        body.append(level & 0xff)                # comfort floor level @ byte 39
+        body.append((2 * seq - 1) & 0xff)        # trailing byte 0 (derived from seq)
+        body.append((255 - (seq >> 2)) & 0xff)   # trailing byte 1 (derived from seq)
+        body += bytes.fromhex("020000000100")    # fixed footer
+        body += b"\xff" * 12                      # command tail padding
+
+        command = "423131" + body.hex()  # "B11" prefix + body
+
+        await self._make_encrypted_request(
+            "write",
+            {
+                "requestAttr": "write",
+                "id": [
+                    {
+                        "data": device.data,
+                        "sIT600I": {"SetCommand_d": command},
+                    }
+                ],
+            },
+        )
+
     @staticmethod
     def round_to_half(number: float) -> float:
         """Rounds number to half of the integer (eg. 1.01 -> 1, 1.4 -> 1.5, 1.8 -> 2)"""
@@ -919,7 +990,7 @@ class IT600Gateway:
                 if self._debug:
                     _LOGGER.debug("Gateway request: POST %s\n%s\n", request_url, request_body_json)
 
-                with async_timeout.timeout(self._request_timeout):
+                async with async_timeout.timeout(self._request_timeout):
                     resp = await self._session.post(
                         request_url,
                         data=self._encryptor.encrypt(request_body_json),
