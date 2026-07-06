@@ -28,9 +28,9 @@ HVAC_MODE_AUTO = "auto"
 # HVAC states
 CURRENT_HVAC_OFF = "off"
 CURRENT_HVAC_HEAT = "heating"
-CURRENT_HVAC_HEAT_IDLE = "heating (idling)"
+CURRENT_HVAC_HEAT_IDLE = "idle"
 CURRENT_HVAC_COOL = "cooling"
-CURRENT_HVAC_COOL_IDLE = "cooling (idling)"
+CURRENT_HVAC_COOL_IDLE = "idle"
 CURRENT_HVAC_IDLE = "idle"
 
 # Supported presets
