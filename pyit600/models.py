@@ -37,6 +37,7 @@ class ClimateDevice(NamedTuple):
     manufacturer: str
     model: Optional[str]
     sw_version: Optional[str]
+    current_floor_temperature: Optional[float] = None
 
 
 class BinarySensorDevice(NamedTuple):

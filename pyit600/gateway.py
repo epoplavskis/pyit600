@@ -119,7 +119,7 @@ class IT600Gateway:
             return gateway["sGateway"]["NetworkLANMAC"]
         except IT600ConnectionError as ae:
             try:
-                with async_timeout.timeout(self._request_timeout):
+                async with async_timeout.timeout(self._request_timeout):
                     await self._session.get(f"http://{self._host}:{self._port}/")
             except Exception:
                 raise IT600ConnectionError(
@@ -500,13 +500,30 @@ class IT600Gateway:
 
                     if th is not None:
                         current_humidity: Optional[float] = None
+                        current_floor_temperature: Optional[float] = None
 
                         if model is not None and "SQ610" in model:
                             current_humidity = th.get("SunnySetpoint_x100", None)  # Quantum thermostats store humidity there, other thermostats store there one of the setpoint temperatures
 
+                            # Floor sensor (S1/S2 input configured as "floor sensor" in installer menu) is not
+                            # exposed as its own named field. Its reading is embedded in the opaque Status_d hex
+                            # blob at character offset [12:16], read as a decimal integer and divided by 100.
+                            # This is confirmed by Status_d[8:12] always matching LocalTemperature_x100 exactly,
+                            # i.e. the same 4-decimal-digit x100 encoding is reused for adjacent slots in Status_d.
+                            if th.get("OUTSensorProbe") == 1:
+                                status_d = th.get("Status_d")
+                                if isinstance(status_d, str) and len(status_d) >= 16:
+                                    try:
+                                        floor_temp_raw = int(status_d[12:16])
+                                        if 0 < floor_temp_raw <= 10000:
+                                            current_floor_temperature = floor_temp_raw / 100
+                                    except ValueError:
+                                        pass  # non-decimal characters (e.g. sentinel like FFFF) => no reading
+
                         device = ClimateDevice(
                             **global_args,
                             current_humidity=current_humidity,
+                            current_floor_temperature=current_floor_temperature,
                             current_temperature=th["LocalTemperature_x100"] / 100,
                             target_temperature=th["HeatingSetpoint_x100"] / 100,
                             max_temp=th.get("MaxHeatSetpoint_x100", 3500) / 100,
@@ -919,7 +936,7 @@ class IT600Gateway:
                 if self._debug:
                     _LOGGER.debug("Gateway request: POST %s\n%s\n", request_url, request_body_json)
 
-                with async_timeout.timeout(self._request_timeout):
+                async with async_timeout.timeout(self._request_timeout):
                     resp = await self._session.post(
                         request_url,
                         data=self._encryptor.encrypt(request_body_json),
